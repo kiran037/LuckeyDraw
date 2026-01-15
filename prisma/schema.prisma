@@ -1,0 +1,227 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model auditlog {
+  id        BigInt   @id @default(autoincrement())
+  action    String
+  entity    String
+  entityId  BigInt?
+  adminId   BigInt?
+  meta      String?  @db.LongText
+  createdAt DateTime @default(now())
+}
+
+model draw {
+  id          BigInt  @id @default(autoincrement())
+  title       String
+  description String?
+
+  // Long URLs / CDN paths / image references
+  bannerImage String? @db.Text
+
+  // Large formatted rules / HTML / markdown
+  rules String? @db.LongText
+
+  entryFee  Int
+  startTime DateTime
+  endTime   DateTime
+  resultAt  DateTime?
+
+  maxTickets Int
+  status     draw_status @default(DRAFT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  drawproduct drawproduct[]
+  payment     payment[]
+  ticket      ticket[]
+  winner      winner[]
+
+  @@index([status])
+  @@index([startTime])
+  @@index([endTime])
+}
+
+model drawproduct {
+  id          BigInt   @id @default(autoincrement())
+  drawId      BigInt
+  name        String
+  image       String?  @db.LongText
+  quantity    Int
+  description String?
+  createdAt   DateTime @default(now())
+  draw        draw     @relation(fields: [drawId], references: [id], onDelete: NoAction, map: "DrawProduct_drawId_fkey")
+  winner      winner[]
+
+  @@index([drawId], map: "DrawProduct_drawId_fkey")
+}
+
+model notification {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      user     @relation(fields: [userId], references: [id], onDelete: NoAction, map: "Notification_userId_fkey")
+
+  @@index([userId], map: "Notification_userId_fkey")
+}
+
+model payment {
+  id     BigInt @id @default(autoincrement())
+  userId BigInt
+  drawId BigInt
+  amount Int
+
+  transactionId    String? @unique
+  gatewayOrderId   String?
+  gatewayPaymentId String?
+
+  method  payment_method
+  gateway payment_gateway
+
+  screenshot    String?
+  failureReason String?
+
+  status payment_status @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  draw   draw    @relation(fields: [drawId], references: [id])
+  user   user    @relation(fields: [userId], references: [id])
+  ticket ticket?
+
+  @@index([userId])
+  @@index([drawId])
+  @@index([status])
+}
+
+model ticket {
+  id         BigInt @id @default(autoincrement())
+  ticketCode String @unique
+
+  userId    BigInt
+  drawId    BigInt
+  paymentId BigInt? @unique
+
+  pricePaid Int
+  status    ticket_status @default(ACTIVE)
+
+  source   ticket_source
+  isWinner Boolean       @default(false)
+
+  coverImage String?
+
+  createdByAdminId BigInt?
+  createdAt        DateTime @default(now())
+
+  user    user     @relation("UserTickets", fields: [userId], references: [id])
+  draw    draw     @relation(fields: [drawId], references: [id])
+  payment payment? @relation(fields: [paymentId], references: [id])
+  winner  winner?
+
+  @@index([userId])
+  @@index([drawId])
+}
+
+model user {
+  id       BigInt  @id @default(autoincrement())
+  email    String? @unique
+  password String
+  name     String
+
+  avatar String? @db.LongText
+  wallet Int     @default(0)
+
+  role     user_role @default(USER)
+  isActive Boolean   @default(true)
+
+  mobile    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notification notification[]
+  payment      payment[]
+  tickets      ticket[]       @relation("UserTickets")
+
+  declaredWinners winner[] @relation("DeclaredBy") // ADD THIS
+  winners         winner[]
+}
+
+model winner {
+  id         BigInt   @id @default(autoincrement())
+  ticketId   BigInt   @unique(map: "Winner_ticketId_key")
+  productId  BigInt
+  drawId     BigInt // ADD THIS - direct reference to draw
+  userId     BigInt // ADD THIS - direct reference to user (winner)
+  declaredBy BigInt
+  declaredAt DateTime @default(now())
+
+  // Relations
+  drawproduct drawproduct @relation(fields: [productId], references: [id], onDelete: NoAction)
+  ticket      ticket      @relation(fields: [ticketId], references: [id], onDelete: NoAction)
+  draw        draw        @relation(fields: [drawId], references: [id], onDelete: NoAction) // ADD THIS
+  user        user        @relation(fields: [userId], references: [id], onDelete: NoAction) // ADD THIS
+  admin       user        @relation("DeclaredBy", fields: [declaredBy], references: [id], onDelete: NoAction) // ADD THIS
+
+  @@index([productId])
+  @@index([drawId]) // ADD THIS
+  @@index([userId]) // ADD THIS
+  @@index([declaredBy]) // ADD THIS
+}
+
+enum user_role {
+  USER
+  ADMIN
+}
+
+enum ticket_source {
+  USER_PURCHASE
+  ADMIN_MANUAL
+}
+
+enum ticket_status {
+  ACTIVE
+  CANCELLED
+  REFUNDED
+}
+
+enum payment_status {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum draw_status {
+  DRAFT
+  LIVE
+  CLOSED
+  RESULT_DECLARED
+}
+
+enum payment_method {
+  UPI
+  CARD
+  NET_BANKING
+  WALLET
+  CASH
+}
+
+enum payment_gateway {
+  RAZORPAY
+  STRIPE
+  PAYTM
+  MANUAL
+}
