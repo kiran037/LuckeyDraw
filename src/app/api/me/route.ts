@@ -1,6 +1,4 @@
-
-
-// src/app/api/me/route.ts
+///Users/xeoren/Desktop/lucky_draw/src/app/api/me/route.ts
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getCurrentUser } from "@/lib/auth";
@@ -19,7 +17,20 @@ export async function GET() {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-    return NextResponse.json({ success: true, data: user });
+    const dbUser = await prisma.user.findUnique({
+      where: { id: BigInt(user.id) }
+    });
+
+    if (!dbUser) return NextResponse.json({ success: false, message: "User not found" }, { status: 404 });
+
+    // Manual serialization to avoid BigInt error
+    const safeUser = {
+      ...dbUser,
+      id: dbUser.id.toString(), // Convert BigInt
+      password: undefined, // Don't send password
+    };
+
+    return NextResponse.json({ success: true, data: safeUser });
   } catch (error) {
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
@@ -31,17 +42,11 @@ export async function PATCH(req: Request) {
     if (!authUser) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
-    
-    // FIX: Use strict type instead of 'any'
     const updateData: UserUpdateData = {};
 
     // --- 1. Basic Info ---
     if (body.name) updateData.name = body.name;
-    
-    // Handle Avatar
-    if (body.avatar !== undefined) {
-      updateData.avatar = body.avatar;
-    }
+    if (body.avatar !== undefined) updateData.avatar = body.avatar;
 
     // --- 2. Unique Fields ---
     if (body.email) {
@@ -78,20 +83,29 @@ export async function PATCH(req: Request) {
       updateData.password = await bcrypt.hash(body.newPassword, 10);
     }
 
-    // --- 4. Execute Update ---
+    // --- 4. Execute Update (REMOVED WALLET FROM SELECT) ---
     const updatedUser = await prisma.user.update({
       where: { id: BigInt(authUser.id) },
       data: updateData,
       select: {
-        id: true, name: true, email: true, mobile: true, 
-        role: true, avatar: true, wallet: true, createdAt: true 
+        id: true, 
+        name: true, 
+        email: true, 
+        mobile: true, 
+        role: true, 
+        avatar: true, 
+        // wallet: true, // REMOVED
+        createdAt: true 
       },
     });
 
     return NextResponse.json({
       success: true,
       message: "Profile updated successfully",
-      data: { ...updatedUser, id: updatedUser.id.toString() },
+      data: { 
+        ...updatedUser, 
+        id: updatedUser.id.toString() // Convert BigInt
+      },
     });
 
   } catch (error) {

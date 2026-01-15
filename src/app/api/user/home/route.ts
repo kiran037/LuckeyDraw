@@ -1,10 +1,8 @@
-// src/app/api/user/home/route.ts
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { draw_status } from "@/generated/client/client"; // Ensure this import path is correct based on your setup
+import { draw_status } from "@/generated/client/client"; // Correct Import
 
-// Define return types for consistency
 type UserTicketData = {
   id: string;
   ticketCode: string;
@@ -27,8 +25,7 @@ export async function GET() {
     const user = await getCurrentUser();
     const now = new Date();
 
-    // 1. Run lightweight Count queries in parallel
-    // We remove the 'totalDraws' fetching from here to save memory/connections
+    // 1. Run lightweight Count queries
     const [activeDrawsCount, totalWinnersCount] = await Promise.all([
       prisma.draw.count({
         where: {
@@ -40,10 +37,7 @@ export async function GET() {
       prisma.winner.count(),
     ]);
 
-    // 2. Calculate Total Prize Pool efficiently
-    // Fetching ALL draws just to sum them is very heavy. 
-    // We use findMany but select minimal fields, or ideally use raw SQL for large datasets.
-    // For now, we keep logic similar but isolated to ensure it doesn't timeout the count queries.
+    // 2. Calculate Total Prize Pool (Efficient)
     const allDrawsForPool = await prisma.draw.findMany({
       where: { status: { not: draw_status.DRAFT } },
       select: { entryFee: true, maxTickets: true },
@@ -54,7 +48,7 @@ export async function GET() {
       0
     );
 
-    // 3. Get Live Draws (Heavy query with includes)
+    // 3. Get Live Draws
     const liveDraws = await prisma.draw.findMany({
       where: {
         status: draw_status.LIVE,
@@ -80,18 +74,15 @@ export async function GET() {
       },
     });
 
-    // 5. User Specific Data (Only if logged in)
+    // 5. User Specific Data
     let userTicketsCount = 0;
     let userTickets: UserTicketData[] = [];
 
     if (user) {
         const userIdBigInt = BigInt(user.id);
         
-        // Execute user queries in parallel as they share the same context
         const [count, tickets] = await Promise.all([
-            prisma.ticket.count({
-                where: { userId: userIdBigInt },
-            }),
+            prisma.ticket.count({ where: { userId: userIdBigInt } }),
             prisma.ticket.findMany({
                 where: { userId: userIdBigInt },
                 take: 3,
@@ -108,7 +99,7 @@ export async function GET() {
                       resultAt: true,
                       drawproduct: {
                         select: { id: true, name: true, image: true },
-                        take: 1,
+                        take: 1, // Only fetch one for thumbnail
                       },
                     },
                   },
@@ -135,6 +126,7 @@ export async function GET() {
                   bannerImage: ticket.draw.bannerImage,
                   endTime: ticket.draw.endTime.toISOString(),
                   resultAt: ticket.draw.resultAt?.toISOString(),
+                  // Safe access
                   productImage: ticket.draw.drawproduct[0]?.image || null,
                 }
               : null,

@@ -36,7 +36,6 @@ async function main() {
       password: hashedPassword,
       role: user_role.ADMIN,
       isActive: true,
-      wallet: 0,
       avatar: null,
     },
   });

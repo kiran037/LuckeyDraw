@@ -1,9 +1,8 @@
-// src/app/api/auth/login/route.ts
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma"; // Ensure this is the singleton
+import { prisma } from "@/lib/prisma";
 import { generateToken, setAuthCookie } from "@/lib/auth";
-import { user_role } from "@/generated/client/client";
+import { user_role } from "@/generated/client/client"; 
 
 export async function POST(req: Request) {
   try {
@@ -13,7 +12,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Missing credentials" }, { status: 400 });
     }
 
-    // Use singleton prisma
     const user = await prisma.user.findUnique({
       where: { mobile: body.mobile },
     });
@@ -31,7 +29,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Invalid credentials" }, { status: 401 });
     }
 
-    const token = generateToken(user.id.toString(), user.role);
+    // Convert BigInt to string for token generation
+    const userIdString = user.id.toString();
+    const token = generateToken(userIdString, user.role);
     await setAuthCookie(token);
 
     const redirectUrl = user.role === user_role.ADMIN ? "/admin/dashboard" : "/";
@@ -41,8 +41,10 @@ export async function POST(req: Request) {
       message: "Login successful",
       data: {
         user: {
-          id: user.id.toString(),
+          id: userIdString,
+          name: user.name,
           role: user.role,
+          avatar: user.avatar,
         },
         redirectUrl,
       },

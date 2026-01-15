@@ -1,12 +1,6 @@
-// src/lib/utils.ts
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import {
-  DrawStatus,
-  PaymentStatus,
-  TicketSource,
-  TicketStatus,
-} from "./types";
+import { DrawStatus, PaymentStatus, TicketStatus } from "./types";
 
 /* ===================== TAILWIND MERGE ===================== */
 
@@ -14,29 +8,29 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/* ===================== STATUS CONFIGS ===================== */
+/* ===================== DARK MODE COMPATIBLE COLORS ===================== */
 
 export const drawStatusConfig: Record<
   DrawStatus,
   { color: string; label: string; iconLabel: string }
 > = {
   DRAFT: {
-    color: "bg-gray-100 text-gray-700",
+    color: "bg-gray-100 text-gray-600 dark:bg-white/5 dark:text-gray-400",
     label: "Draft",
     iconLabel: "📝",
   },
   LIVE: {
-    color: "bg-green-100 text-green-700",
+    color: "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 border border-green-200 dark:border-green-500/30",
     label: "Live Now",
     iconLabel: "🔴",
   },
   CLOSED: {
-    color: "bg-blue-100 text-blue-700",
+    color: "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
     label: "Closed",
     iconLabel: "🔒",
   },
   RESULT_DECLARED: {
-    color: "bg-purple-100 text-purple-700",
+    color: "bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400",
     label: "Results Out",
     iconLabel: "🏆",
   },
@@ -44,38 +38,19 @@ export const drawStatusConfig: Record<
 
 export const paymentStatusConfig: Record<
   PaymentStatus,
-  { color: string; label: string; iconLabel: string }
+  { color: string; label: string }
 > = {
   PENDING: {
-    color: "bg-yellow-100 text-yellow-700",
+    color: "bg-yellow-50 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-400",
     label: "Pending",
-    iconLabel: "⏳",
   },
   APPROVED: {
-    color: "bg-green-100 text-green-700",
-    label: "Approved",
-    iconLabel: "✅",
+    color: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
+    label: "Success",
   },
   REJECTED: {
-    color: "bg-red-100 text-red-700",
-    label: "Rejected",
-    iconLabel: "❌",
-  },
-};
-
-export const ticketSourceConfig: Record<
-  TicketSource,
-  { color: string; label: string; iconLabel: string }
-> = {
-  USER_PURCHASE: {
-    color: "bg-blue-100 text-blue-700",
-    label: "Purchased",
-    iconLabel: "🎫",
-  },
-  ADMIN_MANUAL: {
-    color: "bg-purple-100 text-purple-700",
-    label: "Admin Gift",
-    iconLabel: "🎁",
+    color: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+    label: "Failed",
   },
 };
 
@@ -84,15 +59,15 @@ export const ticketStatusConfig: Record<
   { color: string; label: string }
 > = {
   ACTIVE: {
-    color: "bg-green-100 text-green-700",
+    color: "bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400",
     label: "Active",
   },
   CANCELLED: {
-    color: "bg-gray-100 text-gray-600",
+    color: "bg-gray-100 text-gray-600 dark:bg-white/5 dark:text-gray-400",
     label: "Cancelled",
   },
   REFUNDED: {
-    color: "bg-yellow-100 text-yellow-700",
+    color: "bg-yellow-50 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-400",
     label: "Refunded",
   },
 };
@@ -104,6 +79,7 @@ export function formatCurrency(amount: number): string {
 }
 
 export function formatDate(date: string | Date): string {
+  if (!date) return "";
   const d = typeof date === "string" ? new Date(date) : date;
   return d.toLocaleDateString("en-IN", {
     day: "numeric",
@@ -113,6 +89,7 @@ export function formatDate(date: string | Date): string {
 }
 
 export function formatDateTime(date: string | Date): string {
+  if (!date) return "";
   const d = typeof date === "string" ? new Date(date) : date;
   return d.toLocaleDateString("en-IN", {
     day: "numeric",
@@ -131,17 +108,10 @@ export function getTimeRemaining(endTime: string | Date): string {
   if (diff <= 0) return "Ended";
 
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor(
-    (diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
-  );
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
   if (days > 0) return `${days}d ${hours}h left`;
   if (hours > 0) return `${hours}h ${minutes}m left`;
   return `${minutes}m left`;
-}
-
-export function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength)}…`;
 }

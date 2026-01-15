@@ -1,7 +1,7 @@
-// src/app/user/layout.tsx
 'use client';
 
-import BottomNav from '@/components/UserUI/BottomNav'; // This is your ResponsiveNav
+import Header from '@/components/Header/Header';
+import BottomNav from '@/components/User/BottomNav';
 
 export default function UserLayout({
   children,
@@ -9,20 +9,18 @@ export default function UserLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[#09090b] text-white">
-      {/* 
-        Responsive Navigation 
-        - Fixed at Bottom on Mobile
-        - Fixed at Left on Desktop
-      */}
+    <div className="min-h-screen bg-gray-50 dark:bg-[#0B0E14] transition-colors duration-300">
+      <Header />
       <BottomNav />
-
-      {/* Main Content Wrapper */}
-      <main className="relative min-h-screen pb-32 md:pb-10 md:pl-32">
-        <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-          {children}
+      <main className="relative w-full">
+        <div className="max-w-7xl mx-auto">
+      
+          <div className="p-4 sm:p-6 lg:p-8 pt-6 pb-32 md:pb-12 md:pl-24 animate-in fade-in slide-in-from-bottom-2 duration-500">
+            {children}
+          </div>
         </div>
       </main>
+      
     </div>
   );
 }

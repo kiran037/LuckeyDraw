@@ -1,8 +1,6 @@
-// src/app/api/auth/logout/route.ts
+///Users/xeoren/Desktop/lucky_draw/src/app/api/auth/logout/route.ts
 import { NextResponse } from "next/server";
 import { clearAuthCookie } from "@/lib/auth";
-
-/* ===================== LOGOUT ===================== */
 
 export async function POST() {
   try {
@@ -13,12 +11,9 @@ export async function POST() {
       message: "Logout successful",
     });
   } catch (error) {
-    console.error("POST /api/auth/logout ERROR:", error);
+    console.error("Logout Error:", error);
     return NextResponse.json(
-      {
-        success: false,
-        message: "Server error",
-      },
+      { success: false, message: "Server error" },
       { status: 500 }
     );
   }

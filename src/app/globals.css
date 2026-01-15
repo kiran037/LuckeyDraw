@@ -1,187 +1,94 @@
-/* src/app/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@plugin "tailwindcss-animate";
-@import "tailwindcss";
-@import "tw-animate-css";
+@layer base {
+  :root {
+    /* --- LIGHT MODE (Apple-like / Clean) --- */
+    --background: 210 40% 98%; /* Soft Off-White */
+    --foreground: 222 47% 11%; /* Deep Navy Text */
 
-@custom-variant dark (&:is(.dark *));
+    --card: 0 0% 100%; /* Pure White */
+    --card-foreground: 222 47% 11%;
 
-/* ============================================
-   CSS VARIABLES
-   ============================================ */
-:root {
-  --font-inter: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --radius: 0.75rem; /* Increased radius for modern app feel */
-  
-  /* Light Mode (Admin Panel Defaults) */
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  
-  /* Sidebar/Admin variables */
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
-}
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
 
-/* ============================================
-   RESET
-   ============================================ */
-*, *::before, *::after { box-sizing: border-box; }
+    --primary: 262 83% 58%; /* Vibrant Purple */
+    --primary-foreground: 210 40% 98%;
 
-body {
-  margin: 0;
-  font-family: var(--font-inter);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222 47% 11%;
 
-button {
-  margin: 0; padding: 0; border: none; background: none; font: inherit; cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215 16% 47%;
 
-/* ============================================
-   CUSTOM SCROLLBAR (Dark Themed)
-   ============================================ */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222 47% 11%;
 
-/* ============================================
-   GLASS & NEON UTILITIES
-   ============================================ */
-.glass-panel {
-  background: rgba(21, 25, 37, 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
 
-.neon-border {
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  box-shadow: 0 0 10px rgba(168, 85, 247, 0.1);
-}
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 262 83% 58%;
 
-/* ============================================
-   TAILWIND THEME CONFIG
-   ============================================ */
-@theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
+    --radius: 1rem; /* 16px default for that "Bento" feel */
+  }
 
-  /* Mapping variables to Tailwind colors */
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-}
+  .dark {
+    /* --- DARK MODE (Deep Matte / Gaming) --- */
+    --background: 224 71% 4%;  /* #0B0E14 - Deep Blue/Black */
+    --foreground: 210 40% 98%;
 
-/* ============================================
-   DARK MODE OVERRIDES (GAMING THEME)
-   ============================================ */
-.dark {
-  /* Background: Deep Gaming Black/Blue (#0B0E14) */
-  --background: oklch(0.12 0.02 260); 
-  
-  /* Foreground: White/Off-white */
-  --foreground: oklch(0.985 0 0);
-  
-  /* Cards: Slightly lighter (#151925) */
-  --card: oklch(0.16 0.02 260); 
-  --card-foreground: oklch(0.985 0 0);
-  
-  /* Popovers */
-  --popover: oklch(0.16 0.02 260);
-  --popover-foreground: oklch(0.985 0 0);
-  
-  /* Primary: Vibrant Purple/Pink */
-  --primary: oklch(0.65 0.25 300); 
-  --primary-foreground: oklch(0.985 0 0);
-  
-  /* Secondary: Muted Blue/Grey */
-  --secondary: oklch(0.25 0.05 260);
-  --secondary-foreground: oklch(0.985 0 0);
-  
-  /* Muted Text */
-  --muted: oklch(0.25 0.05 260);
-  --muted-foreground: oklch(0.65 0 0);
-  
-  /* Accents */
-  --accent: oklch(0.25 0.05 260);
-  --accent-foreground: oklch(0.985 0 0);
-  
-  /* Borders: Very subtle */
-  --destructive: oklch(0.6 0.2 20);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.65 0.25 300);
+    --card: 222 47% 11%; /* Slightly lighter than BG */
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 263 70% 50%; /* Deep Purple */
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 217 19% 27%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 19% 27%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 19% 27%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 19% 27%;
+    --input: 217 19% 27%;
+    --ring: 263 70% 50%;
+  }
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* --- CUSTOM GLASS UTILITIES --- */
+@layer utilities {
+  .glass {
+    @apply bg-white/70 dark:bg-[#0B0E14]/70 backdrop-blur-xl border border-white/20 dark:border-white/5;
+  }
+  
+  .glass-card {
+    @apply bg-white dark:bg-[#151925] shadow-lg shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-white/5;
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-pink-500;
   }
 }

@@ -1,27 +1,22 @@
-// src/app/api/auth/forgot-password/route.ts
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
-    const body: {
-      mobile?: string;
-      oldPassword?: string;
-      newPassword?: string;
-    } = await req.json();
+    const body = await req.json();
 
     /* ---------- VALIDATION ---------- */
     if (!body.mobile || !body.oldPassword || !body.newPassword) {
       return NextResponse.json(
-        { success: false, message: "Mobile, old password, and new password are required" },
+        { success: false, message: "All fields are required" },
         { status: 400 }
       );
     }
 
     if (body.newPassword.length < 6) {
       return NextResponse.json(
-        { success: false, message: "New password must be at least 6 characters long" },
+        { success: false, message: "New password must be 6+ chars" },
         { status: 400 }
       );
     }
@@ -71,7 +66,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("Forgot Password Error:", error);
     return NextResponse.json(
-      { success: false, message: "Server error. Please try again." },
+      { success: false, message: "Server error" },
       { status: 500 }
     );
   }

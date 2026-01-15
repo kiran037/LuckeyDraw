@@ -1,22 +1,22 @@
-// src/app/HomePage.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api-client';
 import { Draw, Ticket } from '@/lib/types';
-import LoadingSpinner from '@/components/UserUI/LoadingSpinner';
-import ErrorState from '@/components/UserUI/ErrorState';
-import Header from '@/components/ClientUI/Header';
-import BottomNav from '@/components/UserUI/BottomNav';
-import HeroCarousel from '@/components/user/home/HeroCarousel';
-import QuickStats from '@/components/user/home/QuickStats';
-import LiveDrawsSection from '@/components/user/home/LiveDrawsSection';
-import HowItWorks from '@/components/user/home/HowItWorks';
-import MyTicketsSection from '@/components/user/home/MyTicketsSection';
-import WinnersLeaderboard from '@/components/user/home/WinnersLeaderboard';
-import TrustIndicators from '@/components/user/home/TrustIndicators';
-import FAQSection from '@/components/user/home/FAQSection';
-import RulesGuidelines from '@/components/user/home/RulesGuidelines';
+
+// New UI Components
+import { PageLoader, PageError } from '@/components/LandingUI/HomePrimitives';
+import Header from '@/components/Header/Header';
+import BottomNav from '@/components/User/BottomNav';
+
+// Feature Components
+import HeroCarousel from '@/components/User/home/HeroCarousel';
+import QuickStats from '@/components/User/home/QuickStats';
+import LiveDrawsSection from '@/components/User/home/LiveDrawsSection';
+import MyTicketsSection from '@/components/User/home/MyTicketsSection';
+import WinnersLeaderboard from '@/components/User/home/WinnersLeaderboard';
+import HowItWorks from '@/components/User/home/HowItWorks';
+import FAQSection from '@/components/User/home/FAQSection';
 
 interface HomeData {
   stats: {
@@ -26,20 +26,17 @@ interface HomeData {
     userTickets?: number;
   };
   liveDraws: Draw[];
-  
-  // UPDATED TICKET DEFINITION
   userTickets: (Omit<Ticket, 'draw'> & {
     draw: {
       id: string;
       title: string;
       status: string;
-      bannerImage: string | null; // Added
-      endTime: string;            // Added
-      resultAt?: string;          // Added
-      productImage?: string | null; // Added
+      bannerImage: string | null;
+      endTime: string;
+      resultAt?: string;
+      productImage?: string | null;
     } | null;
   })[];
-
   recentWinners: Array<{
     id: string;
     userName: string;
@@ -51,21 +48,6 @@ interface HomeData {
   isLoggedIn: boolean;
 }
 
-// REFINED: Ambient Background Glow
-// Darker, subtler, and positioned to not interfere with reading
-const BackgroundGlow = () => (
-  <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none select-none">
-    {/* Deep Purple Top Left - Reduced Opacity */}
-    <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-purple-900/20 rounded-full blur-[120px]" />
-    
-    {/* Deep Indigo Bottom Right - Reduced Opacity */}
-    <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-indigo-900/15 rounded-full blur-[120px]" />
-    
-    {/* Very subtle center fill to prevent pitch black void */}
-    <div className="absolute top-[30%] left-[50%] -translate-x-1/2 w-[800px] h-[800px] bg-blue-900/05 rounded-full blur-[100px]" />
-  </div>
-);
-
 export default function HomePage() {
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,101 +58,80 @@ export default function HomePage() {
       setLoading(true);
       setError(null);
       try {
+        // Fix: Use generic type correctly
         const response = await api.get<HomeData>('/user/home');
-        if (!response.success) {
-          setError(response.error || 'Failed to load data');
-          setLoading(false);
-          return;
+        if (response.success && response.data) {
+          setData(response.data);
+        } else {
+          setError(response.message || 'Failed to load data');
         }
-        setData(response.data || null);
       } catch (err) {
-        setError('Failed to load data');
+        setError('Connection failed');
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     void loadHomeData();
   }, []);
 
-  if (loading) return (
-    <div className="min-h-screen bg-[#0B0E14] flex items-center justify-center">
-      <BackgroundGlow />
-      <LoadingSpinner />
-    </div>
-  );
-
-  if (error) return (
-    <div className="min-h-screen bg-[#0B0E14] flex items-center justify-center">
-      <BackgroundGlow />
-      <ErrorState message={error} onRetry={() => window.location.reload()} />
-    </div>
-  );
-
-  if (!data) return <ErrorState message="No data available" />;
+  if (loading) return <PageLoader />;
+  if (error) return <PageError message={error} onRetry={() => window.location.reload()} />;
+  if (!data) return <PageError message="No data available" />;
 
   return (
-    <div className="min-h-screen bg-[#0B0E14] text-white selection:bg-purple-500/30 font-sans">
-      <BackgroundGlow />
+    <div className="min-h-screen bg-[#F5F5F7] dark:bg-[#0B0E14] text-gray-900 dark:text-white pb-24 transition-colors duration-300 font-sans">
       <Header />
       
-      {/* Main Container - Adjusted spacing for mobile clarity */}
-      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 flex flex-col gap-8 sm:gap-12 pb-32">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-10 sm:space-y-16">
         
-        {/* 1. Hero Section */}
-        <section className="w-full">
+        {/* 1. Hero & Stats */}
+        <div className="space-y-6">
           <HeroCarousel />
-        </section>
+          {data.stats && <QuickStats stats={data.stats} isLoggedIn={data.isLoggedIn} />}
+        </div>
 
-{/* 2. Stats - Kept close to Hero for context */}
-<section className="-mt-2 sm:mt-0">
-  {data.stats && (
-    <QuickStats stats={data.stats} isLoggedIn={data.isLoggedIn} />
-  )}
-</section>
-
-        {/* 3. Live Draws - The Main Action */}
+        {/* 2. Live Action */}
         <section>
           <LiveDrawsSection draws={data.liveDraws} />
         </section>
 
-        {/* 4. My Tickets (Conditional) */}
+        {/* 3. Personal Dashboard (If User) */}
         {data.isLoggedIn && data.userTickets.length > 0 && (
           <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
              <MyTicketsSection tickets={data.userTickets} />
           </section>
         )}
 
-        {/* 6. Social Proof (Winners & Trust) */}
-        <div className="grid lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2">
-            <WinnersLeaderboard winners={data.recentWinners} />
-          </div>
-          <div className="flex flex-col gap-6 justify-center">
-            <TrustIndicators />
+        {/* 4. Social Proof & Info Grid */}
+        <div className="grid lg:grid-cols-12 gap-8 lg:gap-12">
+          
+          {/* Left: Winners (8 cols) */}
+          <div className="lg:col-span-8 space-y-10">
+            <section>
+              <WinnersLeaderboard winners={data.recentWinners} />
+            </section>
             
-            {/* Simple CTA Box */}
-            <div className="bg-gradient-to-br from-purple-900/20 to-pink-900/20 rounded-2xl p-6 border border-white/5 text-center">
-              <h3 className="font-bold text-white mb-2">Need Help?</h3>
-              <p className="text-xs text-gray-400 mb-4">Our support team is available 24/7 to assist you with your tickets.</p>
-              <button className="text-xs font-bold text-white bg-white/10 px-4 py-2 rounded-lg hover:bg-white/20 transition-colors">
-                Contact Support
+            <section className="bg-white dark:bg-[#151925] rounded-3xl p-6 sm:p-8 border border-gray-100 dark:border-white/5 shadow-sm">
+              <HowItWorks />
+            </section>
+          </div>
+
+          {/* Right: Support & FAQ (4 cols) */}
+          <div className="lg:col-span-4 space-y-6">
+            <div className="bg-gradient-to-br from-purple-600 to-indigo-600 rounded-3xl p-6 text-white shadow-xl shadow-purple-500/20">
+              <h3 className="font-bold text-lg mb-2">Need Assistance?</h3>
+              <p className="text-sm text-purple-100 mb-4 leading-relaxed">
+                Our support team is available 24/7 to help you with payments or tickets.
+              </p>
+              <button className="w-full py-3 bg-white text-purple-600 font-bold rounded-xl text-sm hover:bg-purple-50 transition-colors">
+                Chat Support
               </button>
             </div>
 
-                {/* 5. How It Works - Visual Break */}
-        <section className="py-2">
-          <HowItWorks />
-        </section>
+            <section>
+               <FAQSection />
+            </section>
           </div>
-        </div>
-
-        {/* 7. Information (FAQ & Rules) */}
-        <div className="border-t border-white/5 pt-8 grid md:grid-cols-2 gap-8">
-          <section>
-            <FAQSection />
-          </section>
-          <section>
-            <RulesGuidelines />
-          </section>
         </div>
 
       </main>

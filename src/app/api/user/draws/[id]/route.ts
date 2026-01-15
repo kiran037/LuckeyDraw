@@ -1,36 +1,22 @@
-import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth"; 
-
-// Helper to handle BigInt serialization safely
-function serialize<T>(data: T): T {
-  return JSON.parse(JSON.stringify(data, (key, value) =>
-    typeof value === 'bigint' ? value.toString() : value
-  ));
-}
+import { jsonResponse, errorResponse } from "@/lib/api-utils";
 
 export async function GET(
   request: Request,
-  // 1. Correctly type the params as a Promise
-  { params }: { params: Promise<{ id: string }> } 
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // 2. Await the params before accessing properties (Critical for Next.js 15)
-    const resolvedParams = await params;
-    const id = resolvedParams.id;
-    
-    if (!id) {
-      return NextResponse.json({ success: false, message: "ID missing" }, { status: 400 });
-    }
-
+    const { id } = await params;
     const drawId = BigInt(id);
-    const sessionUser = await getCurrentUser(); 
+    const sessionUser = await getCurrentUser();
 
-    // 3. Fetch Draw
+    // 1. Fetch Draw Info
     const draw = await prisma.draw.findUnique({
       where: { id: drawId },
       include: {
-        drawproduct: true,
+        drawproduct: true, // Prizes
+        // Only fetch winners if declared
         winner: {
           include: {
             user: { select: { name: true, avatar: true } },
@@ -40,26 +26,27 @@ export async function GET(
       }
     });
 
-    if (!draw) {
-      return NextResponse.json({ success: false, message: "Draw not found" }, { status: 404 });
-    }
+    if (!draw) return errorResponse("Draw not found", 404);
 
-    // 4. Count Sold Tickets
+    // 2. Count Sold Tickets
     const soldTickets = await prisma.ticket.count({
       where: { drawId: drawId, status: 'ACTIVE' }
     });
 
-    // 5. Check User Status
+    // 3. Check User Status (Joined? Pending?)
     let hasJoined = false;
     let pendingPayment = false;
 
     if (sessionUser) {
       const userId = BigInt(sessionUser.id);
+      
+      // Check for Active Ticket
       const ticket = await prisma.ticket.findFirst({
         where: { drawId: drawId, userId: userId, status: 'ACTIVE' }
       });
       if (ticket) hasJoined = true;
 
+      // Check for Pending Payment (if not joined yet)
       if (!hasJoined) {
         const payment = await prisma.payment.findFirst({
           where: { drawId: drawId, userId: userId, status: 'PENDING' }
@@ -68,31 +55,29 @@ export async function GET(
       }
     }
 
-    // 6. Construct Response
+    // 4. Calculate Stats
     const total = draw.maxTickets;
     const progress = total > 0 ? Math.min(Math.round((soldTickets / total) * 100), 100) : 0;
-    const left = Math.max(0, total - soldTickets);
+    const isExpired = new Date() > new Date(draw.endTime);
 
-    const responseData = {
-      ...draw, 
+    return jsonResponse({
+      ...draw,
       stats: {
         sold: soldTickets,
         total: total,
         progress: progress,
-        left: left
+        left: Math.max(0, total - soldTickets)
       },
-      hasJoined,
-      pendingPayment,
-      isExpired: new Date() > new Date(draw.endTime)
-    };
-
-    return NextResponse.json(serialize({
-      success: true,
-      data: responseData
-    }));
+      userStatus: {
+        hasJoined,
+        pendingPayment,
+        isGuest: !sessionUser
+      },
+      isExpired
+    });
 
   } catch (error) {
-    console.error("GET Draw Details Error:", error);
-    return NextResponse.json({ success: false, message: "Server Error" }, { status: 500 });
+    console.error("GET DRAW DETAILS ERROR:", error);
+    return errorResponse("Server error", 500);
   }
 }

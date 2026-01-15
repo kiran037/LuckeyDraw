@@ -20,7 +20,6 @@ export interface AuthUser {
   role: user_role;
   isActive: boolean;
   avatar: string | null;
-  wallet: number;
   createdAt: Date;
 }
 
@@ -50,7 +49,6 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
         role: true,
         isActive: true,
         avatar: true,
-        wallet: true,
         createdAt: true,
       },
     });

@@ -1,8 +1,7 @@
-// src/app/api/auth/register/route.ts
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { user_role } from "@/generated/client/client";
+import { user_role } from "@/generated/client/client"; // Or your generated path
 
 export async function POST(req: Request) {
   try {
@@ -19,7 +18,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Password too short" }, { status: 400 });
     }
 
-    // 2. Check Duplicates (Parallel check)
+    // 2. Check Duplicates
     const [existingMobile, existingEmail] = await Promise.all([
       prisma.user.findUnique({ where: { mobile: body.mobile }, select: { id: true } }),
       body.email ? prisma.user.findUnique({ where: { email: body.email }, select: { id: true } }) : null
@@ -32,7 +31,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Email already registered" }, { status: 409 });
     }
 
-    // 3. Create User
+    // 3. Create User (REMOVED WALLET HERE)
     const hashedPassword = await bcrypt.hash(body.password, 10);
     const user = await prisma.user.create({
       data: {
@@ -42,7 +41,6 @@ export async function POST(req: Request) {
         password: hashedPassword,
         role: user_role.USER,
         isActive: true,
-        wallet: 0,
       },
       select: { id: true }
     });
@@ -50,6 +48,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       message: "Registration successful",
+      // Fix: Convert BigInt to string
       data: { id: user.id.toString() }
     });
 

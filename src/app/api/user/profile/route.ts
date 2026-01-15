@@ -9,10 +9,7 @@ export async function GET() {
     const sessionUser = await getCurrentUser();
 
     if (!sessionUser) {
-      return NextResponse.json(
-        { success: false, message: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
     const userId = BigInt(sessionUser.id);
@@ -23,24 +20,9 @@ export async function GET() {
       unreadNotifications,
       dbUser,
     ] = await Promise.all([
-      prisma.ticket.count({
-        where: { userId },
-      }),
-
-      prisma.ticket.count({
-        where: {
-          userId,
-          isWinner: true,
-        },
-      }),
-
-      prisma.notification.count({
-        where: {
-          userId,
-          isRead: false,
-        },
-      }),
-
+      prisma.ticket.count({ where: { userId } }),
+      prisma.ticket.count({ where: { userId, isWinner: true } }),
+      prisma.notification.count({ where: { userId, isRead: false } }),
       prisma.user.findUnique({
         where: { id: userId },
         select: {
@@ -52,15 +34,13 @@ export async function GET() {
           isActive: true,
           createdAt: true,
           updatedAt: true,
+          // wallet: true, // REMOVED
         },
       }),
     ]);
 
     if (!dbUser) {
-      return NextResponse.json(
-        { success: false, message: "User not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 });
     }
 
     return NextResponse.json({
@@ -78,7 +58,6 @@ export async function GET() {
           updatedAt: dbUser.updatedAt,
         },
         stats: {
-          // Wrap in Number() to prevent BigInt serialization crash
           totalTickets: Number(totalTickets),
           winningTickets: Number(winningTickets),
           unreadNotifications: Number(unreadNotifications),
@@ -87,10 +66,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error("GET USER PROFILE ERROR:", error);
-    return NextResponse.json(
-      { success: false, message: "Server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
 
@@ -113,13 +89,9 @@ export async function PATCH(req: Request) {
 
     // --- 1. Basic Info ---
     if (body.name) updateData.name = body.name;
-    
-    // Handle Avatar (allow null to remove)
-    if (body.avatar !== undefined) {
-      updateData.avatar = body.avatar;
-    }
+    if (body.avatar !== undefined) updateData.avatar = body.avatar;
 
-    // --- 2. Unique Fields (Email/Mobile) ---
+    // --- 2. Unique Fields ---
     if (body.email) {
       const existing = await prisma.user.findUnique({ where: { email: body.email } });
       if (existing && existing.id.toString() !== authUser.id) {
@@ -154,8 +126,6 @@ export async function PATCH(req: Request) {
       updateData.password = await bcrypt.hash(body.newPassword, 10);
     }
 
-    // --- 4. Execute Update ---
-    // If no data to update, return early
     if (Object.keys(updateData).length === 0) {
        return NextResponse.json({ success: true, message: "No changes detected" });
     }
@@ -165,14 +135,14 @@ export async function PATCH(req: Request) {
       data: updateData,
       select: {
         id: true, name: true, email: true, mobile: true, 
-        role: true, avatar: true, wallet: true, createdAt: true 
+        role: true, avatar: true, createdAt: true 
+        // wallet: true // REMOVED
       },
     });
 
     return NextResponse.json({
       success: true,
       message: "Profile updated successfully",
-      // Return formatted user to update frontend state immediately
       data: { 
         user: { 
           ...updatedUser, 

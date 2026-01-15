@@ -4,9 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api-client';
 import { formatCurrency, getTimeRemaining } from '@/lib/utils';
-import Header from '@/components/ClientUI/Header';
-import BottomNav from '@/components/UserUI/BottomNav';
-import { ChevronLeft, ChevronRight, Trophy, Calendar, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Trophy, Calendar, Clock, AlertCircle, Loader2 } from 'lucide-react';
 
 // --- Types ---
 
@@ -29,9 +27,9 @@ interface Draw {
   }[];
 }
 
-interface DrawsResponse {
-  success: boolean;
-  data: Draw[]; 
+// FIX 1: Updated Interface to match API structure exactly
+interface DrawsResponseData {
+  draws: Draw[]; 
   pagination: {
     total: number;
     page: number;
@@ -42,77 +40,87 @@ interface DrawsResponse {
 
 // --- Components ---
 
-const BackgroundGlow = () => (
-  <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none select-none">
-    <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-purple-900/20 rounded-full blur-[120px]" />
-    <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-900/15 rounded-full blur-[120px]" />
-  </div>
-);
-
 const DrawCard = ({ draw }: { draw: Draw }) => {
   const timeRemaining = getTimeRemaining(draw.endTime);
   const isSoldOut = draw.stats.percentage >= 100;
+  const isLive = draw.status === 'LIVE';
 
   return (
     <Link href={`/user/draws/${draw.id}`} className="block h-full">
-      <div className="group relative bg-[#1A1F2E] border border-white/5 hover:border-purple-500/30 rounded-[1.5rem] overflow-hidden transition-all duration-300 hover:transform hover:-translate-y-1 hover:shadow-xl hover:shadow-purple-900/20 h-full flex flex-col">
-        <div className="relative h-48 bg-gray-900 overflow-hidden">
+      <div className="
+        group relative h-full flex flex-col overflow-hidden transition-all duration-300
+        bg-white dark:bg-[#151925] 
+        border border-gray-200 dark:border-white/5 
+        hover:border-purple-500/30 dark:hover:border-purple-500/30
+        rounded-[24px] shadow-sm hover:shadow-xl hover:-translate-y-1
+      ">
+        
+        {/* Image Section */}
+        <div className="relative h-48 bg-gray-100 dark:bg-[#0B0E14] overflow-hidden">
           {draw.bannerImage || (draw.drawproduct[0]?.image) ? (
             <img 
               src={draw.bannerImage || draw.drawproduct[0]?.image || ''} 
               alt={draw.title} 
-              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-90 group-hover:opacity-100" 
+              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
             />
           ) : (
-             <div className="w-full h-full bg-gradient-to-br from-purple-900 to-indigo-900 flex items-center justify-center">
-               <Trophy className="text-white/20 w-12 h-12" />
+             <div className="w-full h-full flex items-center justify-center bg-gray-50 dark:bg-[#1A1F2E]">
+               <Trophy className="text-gray-300 dark:text-white/20 w-12 h-12" />
              </div>
           )}
+          
+          {/* Status Badge */}
           <div className="absolute top-3 right-3">
              <span className={`
-               backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border
-               ${draw.status === 'LIVE' ? 'bg-green-500/20 border-green-500/30 text-green-400' : ''}
-               ${draw.status === 'CLOSED' ? 'bg-red-500/20 border-red-500/30 text-red-400' : ''}
-               ${draw.status === 'RESULT_DECLARED' ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400' : ''}
+               backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-sm
+               ${draw.status === 'LIVE' 
+                 ? 'bg-white/90 text-green-700 border-green-200 dark:bg-black/50 dark:text-green-400 dark:border-green-500/30' 
+                 : 'bg-white/90 text-gray-600 border-gray-200 dark:bg-black/50 dark:text-gray-400 dark:border-white/10'}
              `}>
                {draw.status === 'RESULT_DECLARED' ? 'Winner Declared' : draw.status}
              </span>
           </div>
         </div>
-        <div className="p-4 flex flex-col flex-1">
-          <div className="mb-3">
-             <p className="text-xs text-purple-400 font-bold uppercase tracking-wider mb-1">
+
+        {/* Content Section */}
+        <div className="p-5 flex flex-col flex-1">
+          <div className="mb-4">
+             <p className="text-xs text-purple-600 dark:text-purple-400 font-bold uppercase tracking-wider mb-1 line-clamp-1">
                {draw.drawproduct[0]?.name || 'Mystery Prize'}
              </p>
-             <h3 className="text-white font-bold text-lg leading-snug line-clamp-2 group-hover:text-purple-300 transition-colors">
+             <h3 className="text-gray-900 dark:text-white font-bold text-lg leading-snug line-clamp-2 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
                {draw.title}
              </h3>
           </div>
+
           <div className="mt-auto space-y-4">
-            <div className="flex justify-between items-end border-t border-white/5 pt-3">
+            {/* Info Row */}
+            <div className="flex justify-between items-end border-t border-gray-100 dark:border-white/5 pt-3">
               <div>
-                <p className="text-[10px] text-gray-500 uppercase font-bold mb-0.5">Entry Fee</p>
-                <p className="text-xl font-bold text-white">{formatCurrency(draw.entryFee)}</p>
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold mb-0.5">Entry Fee</p>
+                <p className="text-xl font-black text-gray-900 dark:text-white">{formatCurrency(draw.entryFee)}</p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] text-gray-500 uppercase font-bold mb-0.5">
-                   {draw.status === 'LIVE' ? 'Ends In' : 'Ended'}
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold mb-0.5">
+                   {isLive ? 'Ends In' : 'Ended'}
                 </p>
-                <div className="flex items-center gap-1.5 text-gray-300 text-sm font-medium bg-white/5 px-2 py-1 rounded-lg">
-                  <Clock size={12} className="text-purple-400" />
-                  {draw.status === 'LIVE' ? timeRemaining : new Date(draw.endTime).toLocaleDateString()}
+                <div className="flex items-center gap-1.5 text-xs font-bold bg-gray-100 dark:bg-white/5 px-2 py-1 rounded-lg text-gray-600 dark:text-gray-300">
+                  <Clock size={12} className="text-purple-500" />
+                  {isLive ? timeRemaining : new Date(draw.endTime).toLocaleDateString()}
                 </div>
               </div>
             </div>
-            {draw.status === 'LIVE' && (
+
+            {/* Progress Bar (Only for Live) */}
+            {isLive && (
               <div className="space-y-1.5">
-                <div className="flex justify-between text-[10px] font-medium">
-                  <span className="text-gray-400">{draw.stats.sold} Sold</span>
-                  <span className="text-purple-400">{draw.stats.percentage}%</span>
+                <div className="flex justify-between text-[10px] font-bold">
+                  <span className="text-gray-500 dark:text-gray-400">{draw.stats.sold} Sold</span>
+                  <span className="text-gray-900 dark:text-white">{draw.stats.percentage}%</span>
                 </div>
-                <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                <div className="w-full bg-gray-100 dark:bg-white/5 rounded-full h-1.5 overflow-hidden">
                   <div 
-                    className={`h-full rounded-full transition-all duration-500 ${isSoldOut ? 'bg-red-500' : 'bg-gradient-to-r from-purple-500 to-pink-500'}`}
+                    className={`h-full rounded-full transition-all duration-500 ${isSoldOut ? 'bg-red-500' : 'bg-purple-600'}`}
                     style={{ width: `${draw.stats.percentage}%` }}
                   />
                 </div>
@@ -126,16 +134,16 @@ const DrawCard = ({ draw }: { draw: Draw }) => {
 };
 
 const DrawSkeleton = () => (
-  <div className="bg-[#1A1F2E] rounded-[1.5rem] overflow-hidden h-[380px] animate-pulse border border-white/5">
-    <div className="h-48 bg-gray-800/50" />
-    <div className="p-4 space-y-4">
+  <div className="bg-white dark:bg-[#151925] rounded-[24px] overflow-hidden h-[380px] border border-gray-200 dark:border-white/5">
+    <div className="h-48 bg-gray-100 dark:bg-white/5 animate-pulse" />
+    <div className="p-5 space-y-4">
       <div className="space-y-2">
-        <div className="h-3 w-1/3 bg-gray-800/50 rounded" />
-        <div className="h-6 w-3/4 bg-gray-800/50 rounded" />
+        <div className="h-3 w-1/3 bg-gray-100 dark:bg-white/5 rounded animate-pulse" />
+        <div className="h-6 w-3/4 bg-gray-100 dark:bg-white/5 rounded animate-pulse" />
       </div>
       <div className="mt-8 space-y-2">
-        <div className="h-10 bg-gray-800/50 rounded" />
-        <div className="h-2 bg-gray-800/50 rounded" />
+        <div className="h-10 bg-gray-100 dark:bg-white/5 rounded animate-pulse" />
+        <div className="h-2 bg-gray-100 dark:bg-white/5 rounded animate-pulse" />
       </div>
     </div>
   </div>
@@ -159,17 +167,25 @@ export default function DrawsPage() {
           limit: '9'
         });
 
-        const res = await api.get<DrawsResponse>(`/user/draws?${query.toString()}`);
+        // Pass the corrected Interface
+        const res = await api.get<DrawsResponseData>(`/user/draws?${query.toString()}`);
         
-        // FIXED: Explicit check and variable assignment to satisfy TypeScript
         if (res.success && res.data) {
-          const payload = res.data; // Now TypeScript knows 'payload' is DrawsResponse
-          setData(payload.data);
+          // FIX 2: Correctly access the 'draws' array from the data object
+          // The API returns: { draws: [], pagination: {} }
+          const payload = res.data;
+          
+          if (Array.isArray(payload.draws)) {
+            setData(payload.draws);
+          } else {
+            setData([]);
+          }
           
           if (payload.pagination) {
             setPagination(prev => ({ 
               ...prev, 
-              totalPages: payload.pagination.totalPages 
+              // API uses 'pages' or 'totalPages', fallback safely
+              totalPages: payload.pagination.totalPages || 1 
             }));
           }
         }
@@ -189,89 +205,99 @@ export default function DrawsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0E14] text-white font-sans selection:bg-purple-500/30 pb-24">
-      <BackgroundGlow />
-      <Header />
+    <div className="min-h-screen bg-gray-50 dark:bg-[#0B0E14] text-gray-900 dark:text-white font-sans pb-32 transition-colors duration-300">
+      
+      {/* Background Glow (Dark Mode Only) */}
+      <div className="fixed inset-0 z-0 pointer-events-none select-none hidden dark:block">
+        <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-purple-900/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-900/10 rounded-full blur-[120px]" />
+      </div>
 
-      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+        {/* Header & Tabs */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 sm:mb-12">
           <div>
-            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white via-white to-gray-400">
+            <h1 className="text-3xl sm:text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-gray-900 via-purple-800 to-gray-600 dark:from-white dark:via-purple-200 dark:to-gray-500 mb-2">
               Explore Draws
             </h1>
-            <p className="text-gray-400 text-sm mt-1">
-              Find your lucky ticket from our curated selection
+            <p className="text-gray-500 dark:text-gray-400 text-sm sm:text-base max-w-md leading-relaxed">
+              Find your lucky ticket from our curated selection of exclusive prizes.
             </p>
           </div>
 
-          <div className="flex p-1 bg-white/5 backdrop-blur-sm rounded-full border border-white/5 self-start md:self-auto">
+          {/* Custom Tabs */}
+          <div className="flex p-1.5 bg-white dark:bg-[#151925] rounded-full border border-gray-200 dark:border-white/5 shadow-sm self-start md:self-auto overflow-x-auto max-w-full">
             {(['live', 'upcoming', 'closed'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => handleTabChange(tab)}
                 className={`
-                  relative px-5 py-2 rounded-full text-sm font-bold transition-all duration-300 capitalize z-10
-                  ${activeTab === tab ? 'text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'}
+                  relative px-6 py-2.5 rounded-full text-sm font-bold transition-all duration-300 capitalize z-10 whitespace-nowrap
+                  ${activeTab === tab 
+                    ? 'text-white shadow-md' 
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}
                 `}
               >
                 {activeTab === tab && (
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-full -z-10 shadow-lg shadow-purple-900/40" />
+                  <div className="absolute inset-0 bg-gray-900 dark:bg-white rounded-full -z-10" />
                 )}
-                {tab}
+                <span className={activeTab === tab ? "text-white dark:text-black" : ""}>
+                   {tab}
+                </span>
               </button>
             ))}
           </div>
         </div>
 
+        {/* Grid Content */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => <DrawSkeleton key={i} />)}
           </div>
         ) : data.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {data.map((draw) => (
               <DrawCard key={draw.id} draw={draw} />
             ))}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-white/10 rounded-3xl bg-white/5">
-            <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mb-4">
-              <Calendar className="text-gray-500" size={24} />
+          <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-gray-300 dark:border-white/10 rounded-[32px] bg-white/50 dark:bg-white/5 animate-in fade-in zoom-in">
+            <div className="w-20 h-20 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mb-5">
+              <Calendar className="text-gray-400" size={32} />
             </div>
-            <h3 className="text-lg font-bold text-white mb-2">No draws found</h3>
-            <p className="text-gray-400 max-w-xs mx-auto">
-              There are currently no {activeTab} draws available. Check back later!
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">No draws found</h3>
+            <p className="text-gray-500 dark:text-gray-400 max-w-xs mx-auto text-sm">
+              There are currently no {activeTab} draws available. Please check back later!
             </p>
           </div>
         )}
 
+        {/* Pagination */}
         {!loading && data.length > 0 && pagination.totalPages > 1 && (
-          <div className="flex justify-center items-center gap-4 mt-12">
+          <div className="flex justify-center items-center gap-4 mt-12 animate-in fade-in">
             <button
               onClick={() => setPagination(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
               disabled={pagination.page === 1}
-              className="p-3 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              className="p-3 rounded-full bg-white dark:bg-[#151925] border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
             >
-              <ChevronLeft size={20} />
+              <ChevronLeft size={20} className="text-gray-600 dark:text-gray-400" />
             </button>
             
-            <span className="text-sm font-medium text-gray-400">
-              Page <span className="text-white font-bold">{pagination.page}</span> of {pagination.totalPages}
+            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Page <span className="text-gray-900 dark:text-white font-bold">{pagination.page}</span> of {pagination.totalPages}
             </span>
 
             <button
               onClick={() => setPagination(prev => ({ ...prev, page: Math.min(prev.totalPages, prev.page + 1) }))}
               disabled={pagination.page === pagination.totalPages}
-              className="p-3 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              className="p-3 rounded-full bg-white dark:bg-[#151925] border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
             >
-              <ChevronRight size={20} />
+              <ChevronRight size={20} className="text-gray-600 dark:text-gray-400" />
             </button>
           </div>
         )}
       </main>
-
-      <BottomNav />
     </div>
   );
 }

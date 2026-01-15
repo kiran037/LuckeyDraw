@@ -1,56 +1,57 @@
-import { NextResponse } from "next/server";
+// src/app/api/user/winners/route.ts
 import { prisma } from "@/lib/prisma";
-import { serializeBigInt } from "@/lib/serialize";
+import { jsonResponse, errorResponse } from "@/lib/api-utils"; // Use the helpers we made
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
+    const limit = Math.max(1, parseInt(searchParams.get("limit") || "10"));
     const skip = (page - 1) * limit;
 
-    // Fetch winners with all necessary relations
-    const winners = await prisma.winner.findMany({
-      skip,
-      take: limit,
-      orderBy: {
-        declaredAt: "desc",
-      },
-      include: {
-        user: {
-          select: {
-            name: true,
-            avatar: true,
-            mobile: true, // We will mask this in the response
+    // Run queries in parallel for better performance
+    const [winners, total] = await Promise.all([
+      prisma.winner.findMany({
+        skip,
+        take: limit,
+        orderBy: {
+          declaredAt: "desc",
+        },
+        include: {
+          user: {
+            select: {
+              name: true,
+              avatar: true,
+              mobile: true,
+            },
+          },
+          draw: {
+            select: {
+              title: true,
+            },
+          },
+          drawproduct: {
+            select: {
+              name: true,
+              image: true,
+            },
+          },
+          ticket: {
+            select: {
+              ticketCode: true,
+            },
           },
         },
-        draw: {
-          select: {
-            title: true,
-          },
-        },
-        drawproduct: {
-          select: {
-            name: true,
-            image: true,
-          },
-        },
-        ticket: {
-          select: {
-            ticketCode: true,
-          },
-        },
-      },
-    });
+      }),
+      prisma.winner.count(),
+    ]);
 
-    const total = await prisma.winner.count();
-
-    // Transform data (mask mobile, format dates)
+    // Transform data
     const formattedWinners = winners.map((w) => ({
-      id: w.id,
+      id: w.id, // jsonResponse will handle BigInt conversion automatically
       userName: w.user.name,
       userAvatar: w.user.avatar,
-      // Mask mobile: ******1234
+      // Mask mobile: 1234567890 -> ******7890
       maskedMobile: w.user.mobile.replace(/.(?=.{4})/g, "*"), 
       prizeName: w.drawproduct.name,
       prizeImage: w.drawproduct.image,
@@ -59,22 +60,18 @@ export async function GET(req: Request) {
       wonAt: w.declaredAt,
     }));
 
-    return NextResponse.json({
-      success: true,
-      data: serializeBigInt({
-        winners: formattedWinners,
-        pagination: {
-          total,
-          page,
-          pages: Math.ceil(total / limit),
-        },
-      }),
+    return jsonResponse({
+      winners: formattedWinners,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      },
     });
+
   } catch (error) {
     console.error("GET WINNERS ERROR:", error);
-    return NextResponse.json(
-      { success: false, message: "Failed to fetch winners" },
-      { status: 500 }
-    );
+    return errorResponse("Failed to fetch winners", 500);
   }
 }

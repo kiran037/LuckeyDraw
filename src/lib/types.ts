@@ -1,23 +1,12 @@
-// src/lib/types.ts
-
 /* ===================== ENUMS ===================== */
 
 export type DrawStatus = "DRAFT" | "LIVE" | "CLOSED" | "RESULT_DECLARED";
 
 export type PaymentStatus = "PENDING" | "APPROVED" | "REJECTED";
 
-export type PaymentMethod =
-  | "UPI"
-  | "CARD"
-  | "NET_BANKING"
-  | "WALLET"
-  | "CASH";
+export type PaymentMethod = "UPI" | "CARD" | "NET_BANKING" | "CASH";
 
-export type PaymentGateway =
-  | "RAZORPAY"
-  | "STRIPE"
-  | "PAYTM"
-  | "MANUAL";
+export type PaymentGateway = "RAZORPAY" | "STRIPE" | "PAYTM" | "MANUAL";
 
 export type TicketSource = "USER_PURCHASE" | "ADMIN_MANUAL";
 
@@ -33,10 +22,10 @@ export interface User {
   email: string | null;
   mobile: string;
   avatar?: string | null;
-  wallet: number;
+  // wallet: number; // REMOVED to match Schema
   role: UserRole;
   isActive: boolean;
-  createdAt: string; // ISO
+  createdAt: string;
 }
 
 /* --------------------- DRAW --------------------- */
@@ -45,27 +34,21 @@ export interface Draw {
   id: string;
   title: string;
   description: string | null;
-
   bannerImage?: string | null;
   rules?: string | null;
-
   entryFee: number;
-  startTime: string; // ISO
-  endTime: string;   // ISO
-  resultAt?: string | null; // ISO
-
+  startTime: string; 
+  endTime: string;   
+  resultAt?: string | null;
   maxTickets: number;
   status: DrawStatus;
-
   createdAt: string;
   updatedAt: string;
 
-  // Relations & Computed Fields
-  products?: DrawProduct[];
+  // Computed / Optional
   ticketCount?: number;
-
-  // UI Helper Fields (Returned by specific API routes)
   productImage?: string | null;
+  products?: DrawProduct[];
 }
 
 /* ------------------ DRAW PRODUCT ------------------ */
@@ -85,20 +68,16 @@ export interface DrawProduct {
 export interface Ticket {
   id: string;
   ticketCode: string;
-
   userId: string;
   drawId: string;
   paymentId: string | null;
-
   pricePaid: number;
   status: TicketStatus;
-
   source: TicketSource;
   isWinner: boolean;
-
   coverImage?: string | null;
   createdAt: string;
-
+  
   // Relations
   draw?: Draw;
   payment?: Payment;
@@ -110,25 +89,12 @@ export interface Payment {
   id: string;
   userId: string;
   drawId: string;
-
   amount: number;
-
   transactionId?: string | null;
-  gatewayOrderId?: string | null;
-  gatewayPaymentId?: string | null;
-
   method: PaymentMethod;
   gateway: PaymentGateway;
-
-  screenshot?: string | null;
-  failureReason?: string | null;
-
   status: PaymentStatus;
-
   createdAt: string;
-  updatedAt: string;
-
-  draw?: Draw;
 }
 
 /* --------------------- WINNER --------------------- */
@@ -139,27 +105,16 @@ export interface Winner {
   productId: string;
   drawId: string;
   userId: string;
-  declaredBy: string;
   declaredAt: string;
-
+  
+  // Relations
   ticket?: Ticket;
   product?: DrawProduct;
   draw?: Draw;
   user?: User;
 }
 
-/* ------------------ NOTIFICATION ------------------ */
-
-export interface Notification {
-  id: string;
-  userId: string;
-  title: string;
-  message: string;
-  isRead: boolean;
-  createdAt: string;
-}
-
-/* ===================== API ===================== */
+/* ===================== API RESPONSE ===================== */
 
 export interface ApiResponse<T = unknown> {
   success: boolean;

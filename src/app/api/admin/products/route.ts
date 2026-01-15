@@ -1,38 +1,24 @@
-// app/api/admin/products/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { jsonResponse, errorResponse } from "@/lib/api-utils";
+import { Prisma } from "@/generated/client/client";
 
 export async function GET(request: NextRequest) {
   try {
-    // Auth check
     const admin = await requireAdmin();
-    if (!admin) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+    if (!admin) return errorResponse("Unauthorized", 401);
 
-    // Extract query params
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
+    const limit = Math.max(1, parseInt(searchParams.get("limit") || "10"));
     const drawId = searchParams.get("drawId");
     const search = searchParams.get("search");
     const sortBy = searchParams.get("sortBy") || "createdAt";
-    const order = searchParams.get("order") || "desc";
+    const order = searchParams.get("order") === "asc" ? "asc" : "desc";
 
-    // Build where clause
-    type WhereClause = {
-      drawId?: bigint;
-      OR?: Array<{
-        name?: { contains: string };
-        description?: { contains: string };
-      }>;
-    };
-
-    const where: WhereClause = {};
+    // Build Query
+    const where: Prisma.drawproductWhereInput = {};
 
     if (drawId) {
       where.drawId = BigInt(drawId);
@@ -45,185 +31,103 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    // Calculate pagination
-    const skip = (page - 1) * limit;
+    // Sort Validation
+    const allowedSorts = ["createdAt", "name", "quantity"];
+    const validSort = allowedSorts.includes(sortBy) ? sortBy : "createdAt";
 
-    // Validate sortBy field
-    const allowedSortFields = ["createdAt", "name", "quantity"];
-    const sortField = allowedSortFields.includes(sortBy) ? sortBy : "createdAt";
-
-    // Fetch products with pagination
-    const [products, total] = await Promise.all([
+    // Transaction
+    const [total, products] = await prisma.$transaction([
+      prisma.drawproduct.count({ where }),
       prisma.drawproduct.findMany({
         where,
+        take: limit,
+        skip: (page - 1) * limit,
+        orderBy: { [validSort]: order },
         include: {
           draw: {
-            select: {
-              id: true,
-              title: true,
-              status: true,
-            },
+            select: { id: true, title: true, status: true },
           },
-          winner: {
-            select: {
-              id: true,
-              ticketId: true,
-              declaredAt: true,
-            },
-          },
+          _count: {
+            select: { winner: true }
+          }
         },
-        orderBy: { [sortField]: order },
-        skip,
-        take: limit,
       }),
-      prisma.drawproduct.count({ where }),
     ]);
 
-    // Format response
-    const formattedProducts = products.map((product) => ({
-      id: product.id.toString(),
-      drawId: product.drawId.toString(),
-      name: product.name,
-      image: product.image,
-      quantity: product.quantity,
-      description: product.description,
-      createdAt: product.createdAt.toISOString(),
-      draw: product.draw
-        ? {
-            id: product.draw.id.toString(),
-            title: product.draw.title,
-            status: product.draw.status,
-          }
-        : null,
-      winnersCount: product.winner.length,
-      remainingQuantity: product.quantity - product.winner.length,
+    // Format (add calculated fields)
+    const formattedProducts = products.map((p) => ({
+      ...p,
+      winnersCount: p._count.winner,
+      remainingQuantity: p.quantity - p._count.winner,
     }));
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        products: formattedProducts,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
+    return jsonResponse({
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
       },
+      products: formattedProducts,
     });
+
   } catch (error) {
-    console.error("Get products error:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch products" },
-      { status: 500 }
-    );
+    console.error("ADMIN GET PRODUCTS ERROR:", error);
+    return errorResponse("Failed to fetch products", 500);
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Auth check
     const admin = await requireAdmin();
-    if (!admin) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+    if (!admin) return errorResponse("Unauthorized", 401);
 
     const body = await request.json();
     const { drawId, name, image, quantity, description } = body;
 
     // Validation
-    if (!drawId || !name || !quantity) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "drawId, name, and quantity are required",
-        },
-        { status: 400 }
-      );
-    }
+    if (!drawId || !name || quantity === undefined) return errorResponse("Missing required fields", 400);
+    if (Number(quantity) < 1) return errorResponse("Quantity must be at least 1", 400);
 
-    if (quantity < 1) {
-      return NextResponse.json(
-        { success: false, error: "Quantity must be at least 1" },
-        { status: 400 }
-      );
-    }
-
-    // Check if draw exists
+    // Check Draw
     const draw = await prisma.draw.findUnique({
       where: { id: BigInt(drawId) },
     });
+    if (!draw) return errorResponse("Draw not found", 404);
 
-    if (!draw) {
-      return NextResponse.json(
-        { success: false, error: "Draw not found" },
-        { status: 404 }
-      );
-    }
-
-    // Create product
+    // Create
     const product = await prisma.drawproduct.create({
       data: {
         drawId: BigInt(drawId),
         name: name.trim(),
         image: image || null,
-        quantity: parseInt(quantity),
+        quantity: Number(quantity),
         description: description?.trim() || null,
       },
       include: {
-        draw: {
-          select: {
-            id: true,
-            title: true,
-            status: true,
-          },
-        },
-      },
+        draw: { select: { id: true, title: true, status: true } }
+      }
     });
 
-    // Log audit
+    // Audit Log
     await prisma.auditlog.create({
       data: {
         action: "CREATE",
         entity: "DRAW_PRODUCT",
         entityId: product.id,
         adminId: BigInt(admin.id),
-        meta: JSON.stringify({
-          drawId,
-          name,
-          quantity,
-        }),
+        meta: JSON.stringify({ drawId, name, quantity }),
       },
     });
 
-    return NextResponse.json({
+    return jsonResponse({
       success: true,
       message: "Product created successfully",
-      data: {
-        id: product.id.toString(),
-        drawId: product.drawId.toString(),
-        name: product.name,
-        image: product.image,
-        quantity: product.quantity,
-        description: product.description,
-        createdAt: product.createdAt.toISOString(),
-        draw: product.draw
-          ? {
-              id: product.draw.id.toString(),
-              title: product.draw.title,
-              status: product.draw.status,
-            }
-          : null,
-      },
-    });
+      product,
+    }, 201);
+
   } catch (error) {
-    console.error("Create product error:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to create product" },
-      { status: 500 }
-    );
+    console.error("ADMIN CREATE PRODUCT ERROR:", error);
+    return errorResponse("Failed to create product", 500);
   }
 }

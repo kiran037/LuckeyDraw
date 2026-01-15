@@ -1,268 +1,226 @@
-// src/app/api/admin/draws/[id]/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
-import { Prisma, draw_status } from "@/generated/client/client";
+import { requireAdmin } from "@/lib/auth";
+import { jsonResponse, errorResponse } from "@/lib/api-utils";
+import { draw_status, Prisma } from "@/generated/client/client";
+
+// Interface for incoming product updates
+interface ProductUpdateInput {
+  id?: string;
+  name: string;
+  image?: string | null;
+  quantity?: number | string;
+  description?: string | null;
+}
 
 /* =========================
-   GET — Draw by ID
+   GET — Single Draw Details + Stats
 ========================= */
 export async function GET(
-  _req: Request,
+  _req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "ADMIN") {
-      return NextResponse.json({ success: false }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin) return errorResponse("Unauthorized", 401);
 
     const { id } = await context.params;
-    if (!id || isNaN(Number(id))) {
-      return NextResponse.json(
-        { success: false, message: "Invalid draw id" },
-        { status: 400 }
-      );
-    }
+    if (!id) return errorResponse("Invalid ID", 400);
+
+    const drawId = BigInt(id);
 
     const draw = await prisma.draw.findUnique({
-      where: { id: BigInt(id) },
-      include: { 
-        _count: { select: { ticket: true } },
+      where: { id: drawId },
+      include: {
         drawproduct: true,
+        _count: { select: { ticket: true } },
       },
     });
 
-    if (!draw) {
-      return NextResponse.json(
-        { success: false, message: "Draw not found" },
-        { status: 404 }
-      );
-    }
+    if (!draw) return errorResponse("Draw not found", 404);
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: draw.id.toString(),
-        title: draw.title,
-        description: draw.description ?? "",
-        bannerImage: draw.bannerImage,
-        rules: draw.rules,
-        entryFee: draw.entryFee,
-        maxTickets: draw.maxTickets,
-        startTime: draw.startTime.toISOString(),
-        endTime: draw.endTime.toISOString(),
-        resultAt: draw.resultAt?.toISOString() || null,
-        status: draw.status,
-        ticketCount: draw._count.ticket,
-        createdAt: draw.createdAt.toISOString(),
-        updatedAt: draw.updatedAt.toISOString(),
-        products: draw.drawproduct.map((p) => ({
-          id: p.id.toString(),
-          name: p.name,
-          image: p.image,
-          quantity: p.quantity,
-          description: p.description,
-        })),
+    // Calculate Revenue
+    const revenueAgg = await prisma.ticket.aggregate({
+      where: { 
+        drawId: drawId,
+        status: { in: ['ACTIVE'] }
       },
+      _sum: { pricePaid: true }
     });
+
+    const sold = draw._count.ticket;
+    const totalRevenue = revenueAgg._sum.pricePaid || 0;
+    const percentage = draw.maxTickets > 0 ? (sold / draw.maxTickets) * 100 : 0;
+
+    return jsonResponse({
+      draw,
+      stats: {
+        sold,
+        remaining: draw.maxTickets - sold,
+        percentage: parseFloat(percentage.toFixed(2)),
+        totalRevenue
+      }
+    });
+
   } catch (err) {
     console.error("ADMIN GET DRAW ERROR:", err);
-    return NextResponse.json(
-      { success: false, message: "Server error" },
-      { status: 500 }
-    );
+    return errorResponse("Server error", 500);
   }
 }
 
 /* =========================
-   PUT — Update draw
+   PUT — Update Draw & Products
 ========================= */
 export async function PUT(
-  req: Request,
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "ADMIN") {
-      return NextResponse.json({ success: false }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin) return errorResponse("Unauthorized", 401);
 
     const { id } = await context.params;
-    if (!id || isNaN(Number(id))) {
-      return NextResponse.json(
-        { success: false, message: "Invalid draw id" },
-        { status: 400 }
-      );
-    }
-
+    const drawId = BigInt(id);
     const body = await req.json();
 
+    // 1. Fetch current state
     const existing = await prisma.draw.findUnique({
-      where: { id: BigInt(id) },
+      where: { id: drawId },
       select: { 
+        _count: { select: { ticket: true } },
         status: true,
-        _count: { select: { ticket: true } }
-      },
+        entryFee: true
+      }
     });
 
-    if (!existing) {
-      return NextResponse.json(
-        { success: false, message: "Draw not found" },
-        { status: 404 }
-      );
+    if (!existing) return errorResponse("Draw not found", 404);
+
+    const soldCount = existing._count.ticket;
+
+    // 2. Logic Validation
+    if (body.maxTickets && body.maxTickets < soldCount) {
+      return errorResponse(`Cannot reduce max tickets below sold count (${soldCount})`, 400);
     }
 
-    const ticketCount = existing._count.ticket;
+    if (soldCount > 0 && body.entryFee !== undefined && body.entryFee !== existing.entryFee) {
+      return errorResponse("Cannot change Entry Fee after tickets have been sold", 400);
+    }
 
-    /* =========================
-       Validation
-    ========================= */
     if (body.startTime && body.endTime) {
-      const startTime = new Date(body.startTime);
-      const endTime = new Date(body.endTime);
-      
-      if (startTime >= endTime) {
-        return NextResponse.json(
-          { success: false, message: "End time must be after start time" },
-          { status: 400 }
-        );
+      if (new Date(body.startTime) >= new Date(body.endTime)) {
+        return errorResponse("End time must be after start time", 400);
       }
     }
 
-    if (body.maxTickets !== undefined && body.maxTickets < ticketCount) {
-      return NextResponse.json(
-        { success: false, message: `Cannot reduce max tickets below ${ticketCount} (already sold)` },
-        { status: 400 }
-      );
-    }
-
-    /* =========================
-       Build update payload
-    ========================= */
+    // 3. Prepare Update Object
     const updateData: Prisma.drawUpdateInput = {};
-
-    if (typeof body.title === "string" && body.title.trim()) {
-      updateData.title = body.title.trim();
-    }
-
-    if ("description" in body) {
-      updateData.description = body.description?.trim() || null;
-    }
-
-    if ("bannerImage" in body) {
-      updateData.bannerImage = body.bannerImage || null;
-    }
-
-    if ("rules" in body) {
-      updateData.rules = body.rules?.trim() || null;
-    }
-
-    // Don't allow changing entry fee if tickets already sold
-    if (body.entryFee !== undefined && ticketCount === 0) {
+    if (body.title) updateData.title = body.title.trim();
+    if (body.description !== undefined) updateData.description = body.description;
+    if (body.bannerImage !== undefined) updateData.bannerImage = body.bannerImage;
+    if (body.rules !== undefined) updateData.rules = body.rules;
+    if (body.status) updateData.status = body.status as draw_status;
+    if (body.startTime) updateData.startTime = new Date(body.startTime);
+    if (body.endTime) updateData.endTime = new Date(body.endTime);
+    if (body.maxTickets) updateData.maxTickets = Number(body.maxTickets);
+    
+    if (soldCount === 0 && body.entryFee !== undefined) {
       updateData.entryFee = Number(body.entryFee);
     }
 
-    if (body.maxTickets !== undefined) {
-      updateData.maxTickets = Number(body.maxTickets);
+    // 4. Handle Products (Create New or Update Existing)
+    if (Array.isArray(body.products)) {
+      const updates: Promise<unknown>[] = [];
+      const creates: Prisma.drawproductCreateWithoutDrawInput[] = [];
+
+      body.products.forEach((p: ProductUpdateInput) => {
+        if (p.id) {
+          // Update existing product
+          updates.push(prisma.drawproduct.update({
+            where: { id: BigInt(p.id) },
+            data: {
+              name: p.name,
+              image: p.image,
+              quantity: Number(p.quantity),
+              description: p.description
+            }
+          }));
+        } else {
+          // Create new product for this draw
+          creates.push({
+            name: p.name,
+            image: p.image,
+            quantity: Number(p.quantity || 1),
+            description: p.description
+          });
+        }
+      });
+
+      if (creates.length > 0) {
+        updateData.drawproduct = { create: creates };
+      }
+
+      // Execute product updates (parallel)
+      await Promise.all(updates);
     }
 
-    if (body.startTime) {
-      updateData.startTime = new Date(body.startTime);
-    }
-
-    if (body.endTime) {
-      updateData.endTime = new Date(body.endTime);
-    }
-
-    if (body.status) {
-      updateData.status = body.status as draw_status;
-    }
-
-    if (Object.keys(updateData).length === 0) {
-      return NextResponse.json(
-        { success: false, message: "No valid fields to update" },
-        { status: 400 }
-      );
-    }
-
-    const updated = await prisma.draw.update({
-      where: { id: BigInt(id) },
+    // 5. Execute Main Draw Update
+    const updatedDraw = await prisma.draw.update({
+      where: { id: drawId },
       data: updateData,
+      include: { drawproduct: true }
     });
 
-    return NextResponse.json({
+    return jsonResponse({
       success: true,
       message: "Draw updated successfully",
-      data: {
-        id: updated.id.toString(),
-        title: updated.title,
-        status: updated.status,
-      },
+      draw: updatedDraw
     });
+
   } catch (err) {
     console.error("ADMIN UPDATE DRAW ERROR:", err);
-    return NextResponse.json(
-      { success: false, message: "Server error" },
-      { status: 500 }
-    );
+    return errorResponse("Failed to update draw", 500);
   }
 }
 
 /* =========================
-   DELETE — Delete draw
+   DELETE — Delete Draw
 ========================= */
 export async function DELETE(
-  _req: Request,
+  _req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser();
-    if (!user || user.role !== "ADMIN") {
-      return NextResponse.json({ success: false }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin) return errorResponse("Unauthorized", 401);
 
     const { id } = await context.params;
-    if (!id || isNaN(Number(id))) {
-      return NextResponse.json(
-        { success: false, message: "Invalid draw id" },
-        { status: 400 }
-      );
-    }
+    const drawId = BigInt(id);
 
     const draw = await prisma.draw.findUnique({
-      where: { id: BigInt(id) },
-      select: { _count: { select: { ticket: true } } },
+      where: { id: drawId },
+      include: { 
+        _count: { select: { ticket: true } }
+      }
     });
 
-    if (!draw) {
-      return NextResponse.json(
-        { success: false, message: "Draw not found" },
-        { status: 404 }
-      );
-    }
+    if (!draw) return errorResponse("Draw not found", 404);
 
-    // Don't allow deletion if tickets exist
     if (draw._count.ticket > 0) {
-      return NextResponse.json(
-        { success: false, message: "Cannot delete draw with existing tickets" },
-        { status: 400 }
-      );
+      return errorResponse("Cannot delete a draw that has active tickets.", 400);
     }
 
-    await prisma.draw.delete({
-      where: { id: BigInt(id) },
+    await prisma.$transaction([
+      prisma.drawproduct.deleteMany({ where: { drawId } }),
+      prisma.draw.delete({ where: { id: drawId } })
+    ]);
+
+    return jsonResponse({
+      success: true,
+      message: "Draw deleted successfully"
     });
 
-    return NextResponse.json({
-      success: true,
-      message: "Draw deleted successfully",
-    });
   } catch (err) {
     console.error("ADMIN DELETE DRAW ERROR:", err);
-    return NextResponse.json(
-      { success: false, message: "Server error" },
-      { status: 500 }
-    );
+    return errorResponse("Failed to delete draw", 500);
   }
 }

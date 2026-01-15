@@ -141,8 +141,7 @@ model user {
   password String
   name     String
 
-avatar String? @db.LongText
-  wallet Int     @default(0)
+  avatar String? @db.LongText
 
   role     user_role @default(USER)
   isActive Boolean   @default(true)

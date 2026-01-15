@@ -113,16 +113,16 @@ export default function Sidebar({ userRole, user }: SidebarProps) {
         {/* Header */}
         <div className="h-24 flex items-center px-4 border-b border-gray-50 overflow-hidden">
           <div className="flex items-center gap-3 w-full">
-<div className="w-14 h-14 flex items-center justify-center flex-shrink-0">
-  <Image
-    src="/logo.png" // your logo path in /public
-    alt="Sawariya Lucky Draw"
-    width={48}
-    height={48}
-    className="object-contain"
-    priority
-  />
-</div>
+            <div className="w-14 h-14 flex items-center justify-center flex-shrink-0">
+              <Image
+                src="/logo.png" // your logo path in /public
+                alt="Sawariya Lucky Draw"
+                width={48}
+                height={48}
+                className="object-contain"
+                priority
+              />
+            </div>
             <div
               className="flex-1 min-w-0 transition-all duration-300"
               style={{
