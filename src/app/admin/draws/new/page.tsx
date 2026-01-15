@@ -127,7 +127,6 @@ export default function NewDrawPage() {
             label="Banner Image"
             value={form.bannerImage}
             onChange={(base64) => setForm({ ...form, bannerImage: base64 })}
-            required
           />
 
           <Textarea

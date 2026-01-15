@@ -1,3 +1,4 @@
+///Users/xeoren/Desktop/draw/src/app/api/user/draws/purchase/initiate/route.ts
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { payment_gateway, payment_method, draw_status, } from '@/generated/client/client';

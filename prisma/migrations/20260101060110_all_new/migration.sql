@@ -1,3 +1,70 @@
+/*
+  Warnings:
+
+  - You are about to drop the `AuditLog` table. If the table is not empty, all the data it contains will be lost.
+  - You are about to drop the `Draw` table. If the table is not empty, all the data it contains will be lost.
+  - You are about to drop the `DrawProduct` table. If the table is not empty, all the data it contains will be lost.
+  - You are about to drop the `Notification` table. If the table is not empty, all the data it contains will be lost.
+  - You are about to drop the `Payment` table. If the table is not empty, all the data it contains will be lost.
+  - You are about to drop the `Ticket` table. If the table is not empty, all the data it contains will be lost.
+  - You are about to drop the `User` table. If the table is not empty, all the data it contains will be lost.
+  - You are about to drop the `Winner` table. If the table is not empty, all the data it contains will be lost.
+
+*/
+-- DropForeignKey
+ALTER TABLE `DrawProduct` DROP FOREIGN KEY `DrawProduct_drawId_fkey`;
+
+-- DropForeignKey
+ALTER TABLE `Notification` DROP FOREIGN KEY `Notification_userId_fkey`;
+
+-- DropForeignKey
+ALTER TABLE `Payment` DROP FOREIGN KEY `Payment_drawId_fkey`;
+
+-- DropForeignKey
+ALTER TABLE `Payment` DROP FOREIGN KEY `Payment_userId_fkey`;
+
+-- DropForeignKey
+ALTER TABLE `Ticket` DROP FOREIGN KEY `Ticket_createdByAdminId_fkey`;
+
+-- DropForeignKey
+ALTER TABLE `Ticket` DROP FOREIGN KEY `Ticket_drawId_fkey`;
+
+-- DropForeignKey
+ALTER TABLE `Ticket` DROP FOREIGN KEY `Ticket_paymentId_fkey`;
+
+-- DropForeignKey
+ALTER TABLE `Ticket` DROP FOREIGN KEY `Ticket_userId_fkey`;
+
+-- DropForeignKey
+ALTER TABLE `Winner` DROP FOREIGN KEY `Winner_productId_fkey`;
+
+-- DropForeignKey
+ALTER TABLE `Winner` DROP FOREIGN KEY `Winner_ticketId_fkey`;
+
+-- DropTable
+DROP TABLE `AuditLog`;
+
+-- DropTable
+DROP TABLE `Draw`;
+
+-- DropTable
+DROP TABLE `DrawProduct`;
+
+-- DropTable
+DROP TABLE `Notification`;
+
+-- DropTable
+DROP TABLE `Payment`;
+
+-- DropTable
+DROP TABLE `Ticket`;
+
+-- DropTable
+DROP TABLE `User`;
+
+-- DropTable
+DROP TABLE `Winner`;
+
 -- CreateTable
 CREATE TABLE `auditlog` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -16,7 +83,7 @@ CREATE TABLE `draw` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `title` VARCHAR(191) NOT NULL,
     `description` VARCHAR(191) NULL,
-    `bannerImage` TEXT NULL,
+    `bannerImage` VARCHAR(191) NULL,
     `rules` LONGTEXT NULL,
     `entryFee` INTEGER NOT NULL,
     `startTime` DATETIME(3) NOT NULL,
@@ -28,8 +95,6 @@ CREATE TABLE `draw` (
     `updatedAt` DATETIME(3) NOT NULL,
 
     INDEX `draw_status_idx`(`status`),
-    INDEX `draw_startTime_idx`(`startTime`),
-    INDEX `draw_endTime_idx`(`endTime`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -38,7 +103,7 @@ CREATE TABLE `drawproduct` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `drawId` BIGINT NOT NULL,
     `name` VARCHAR(191) NOT NULL,
-    `image` LONGTEXT NULL,
+    `image` VARCHAR(191) NULL,
     `quantity` INTEGER NOT NULL,
     `description` VARCHAR(191) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -112,7 +177,7 @@ CREATE TABLE `user` (
     `email` VARCHAR(191) NULL,
     `password` VARCHAR(191) NOT NULL,
     `name` VARCHAR(191) NOT NULL,
-    `avatar` LONGTEXT NULL,
+    `avatar` VARCHAR(191) NULL,
     `wallet` INTEGER NOT NULL DEFAULT 0,
     `role` ENUM('USER', 'ADMIN') NOT NULL DEFAULT 'USER',
     `isActive` BOOLEAN NOT NULL DEFAULT true,
@@ -130,16 +195,11 @@ CREATE TABLE `winner` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `ticketId` BIGINT NOT NULL,
     `productId` BIGINT NOT NULL,
-    `drawId` BIGINT NOT NULL,
-    `userId` BIGINT NOT NULL,
     `declaredBy` BIGINT NOT NULL,
     `declaredAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
     UNIQUE INDEX `Winner_ticketId_key`(`ticketId`),
-    INDEX `winner_productId_idx`(`productId`),
-    INDEX `winner_drawId_idx`(`drawId`),
-    INDEX `winner_userId_idx`(`userId`),
-    INDEX `winner_declaredBy_idx`(`declaredBy`),
+    INDEX `Winner_productId_fkey`(`productId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -165,16 +225,7 @@ ALTER TABLE `ticket` ADD CONSTRAINT `ticket_drawId_fkey` FOREIGN KEY (`drawId`) 
 ALTER TABLE `ticket` ADD CONSTRAINT `ticket_paymentId_fkey` FOREIGN KEY (`paymentId`) REFERENCES `payment`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `winner` ADD CONSTRAINT `winner_productId_fkey` FOREIGN KEY (`productId`) REFERENCES `drawproduct`(`id`) ON DELETE NO ACTION ON UPDATE CASCADE;
+ALTER TABLE `winner` ADD CONSTRAINT `Winner_productId_fkey` FOREIGN KEY (`productId`) REFERENCES `drawproduct`(`id`) ON DELETE NO ACTION ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `winner` ADD CONSTRAINT `winner_ticketId_fkey` FOREIGN KEY (`ticketId`) REFERENCES `ticket`(`id`) ON DELETE NO ACTION ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `winner` ADD CONSTRAINT `winner_drawId_fkey` FOREIGN KEY (`drawId`) REFERENCES `draw`(`id`) ON DELETE NO ACTION ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `winner` ADD CONSTRAINT `winner_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `user`(`id`) ON DELETE NO ACTION ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `winner` ADD CONSTRAINT `winner_declaredBy_fkey` FOREIGN KEY (`declaredBy`) REFERENCES `user`(`id`) ON DELETE NO ACTION ON UPDATE CASCADE;
+ALTER TABLE `winner` ADD CONSTRAINT `Winner_ticketId_fkey` FOREIGN KEY (`ticketId`) REFERENCES `ticket`(`id`) ON DELETE NO ACTION ON UPDATE CASCADE;

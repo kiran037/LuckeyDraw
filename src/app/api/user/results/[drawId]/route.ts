@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { draw_status } from "@/generated/client/client";
+import { draw_status } from "@/generated/client/client"; // Adjusted import path based on common patterns, ensure this matches your generated path
 
 export async function GET(
   _req: Request,
-  { params }: { params: { drawId: string } }
+  // 1. UPDATE TYPE: params is now a Promise
+  { params }: { params: Promise<{ drawId: string }> }
 ) {
   try {
     const user = await getCurrentUser();
@@ -17,7 +18,9 @@ export async function GET(
       );
     }
 
-    const drawId = params.drawId;
+    // 2. AWAIT PARAMS: specific to Next.js 15+
+    const resolvedParams = await params;
+    const drawId = resolvedParams.drawId;
 
     if (!drawId || isNaN(Number(drawId))) {
       return NextResponse.json(
@@ -103,8 +106,7 @@ export async function GET(
           declaredAt: winner.declaredAt.toISOString(),
           winnerName: winner.ticket.user.name,
           winnerMobile: winner.ticket.user.mobile,
-          isCurrentUser:
-            winner.ticket.userId === currentUserId,
+          isCurrentUser: winner.ticket.userId === currentUserId,
         })),
       })),
     };

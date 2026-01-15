@@ -1,4 +1,3 @@
-///Users/xeoren/Desktop/draw/src/app/api/admin/reports/draws/route.ts
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { serializeBigInt } from "@/lib/serialize";
@@ -14,8 +13,9 @@ export async function GET() {
       endTime: true,
       _count: {
         select: {
-          tickets: true,
-          payments: true,
+          // FIX: Use singular names to match your schema definition
+          ticket: true,  
+          payment: true, 
         },
       },
     },
@@ -24,6 +24,6 @@ export async function GET() {
 
   return NextResponse.json({
     status: true,
-    data: serializeBigInt(data), // ✅ FIX
+    data: serializeBigInt(data),
   });
 }

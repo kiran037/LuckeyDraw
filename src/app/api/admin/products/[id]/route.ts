@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+// TYPE FIX: params is now Promise<{ id: string }>
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> } 
 ) {
   try {
     // Auth check
@@ -17,7 +18,7 @@ export async function GET(
       );
     }
 
-const { id } = await params;
+    const { id } = await params;
 
     // Fetch product with full details
     const product = await prisma.drawproduct.findUnique({
@@ -112,9 +113,10 @@ const { id } = await params;
   }
 }
 
+// TYPE FIX: params is now Promise<{ id: string }>
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Auth check
@@ -126,7 +128,7 @@ export async function PATCH(
       );
     }
 
-const { id } = await params;
+    const { id } = await params;
     const body = await request.json();
     const { name, image, quantity, description } = body;
 
@@ -229,9 +231,10 @@ const { id } = await params;
   }
 }
 
+// TYPE FIX: params is now Promise<{ id: string }>
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Auth check
@@ -243,7 +246,7 @@ export async function DELETE(
       );
     }
 
-const { id } = await params;
+    const { id } = await params;
 
     // Check if product exists and has winners
     const product = await prisma.drawproduct.findUnique({

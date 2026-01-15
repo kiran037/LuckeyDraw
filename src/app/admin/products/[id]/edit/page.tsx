@@ -260,8 +260,6 @@ useEffect(() => {
               label="Product Image"
               value={form.image}
               onChange={(base64) => setForm({ ...form, image: base64 })}
-              preview
-              maxWidth={1200}
             />
 
             {/* Product Name */}

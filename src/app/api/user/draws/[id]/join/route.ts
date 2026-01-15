@@ -1,3 +1,4 @@
+///Users/xeoren/Desktop/draw/src/app/api/user/draws/[id]/join/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";

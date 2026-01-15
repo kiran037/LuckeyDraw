@@ -1,4 +1,3 @@
-///Users/xeoren/Desktop/draw/src/app/api/admin/reports/winners/route.ts
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { serializeBigInt } from "@/lib/serialize";
@@ -6,9 +5,11 @@ import { serializeBigInt } from "@/lib/serialize";
 export async function GET() {
   const draws = await prisma.draw.findMany({
     include: {
-      products: {
+      // FIX 1: 'products' -> 'drawproduct' (matches schema)
+      drawproduct: {
         include: {
-          winners: {
+          // FIX 2: 'winners' -> 'winner' (matches schema)
+          winner: {
             include: {
               ticket: {
                 include: {

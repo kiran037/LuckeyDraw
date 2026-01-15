@@ -1,15 +1,14 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api-client';
 import LoadingSpinner from '@/components/UserUI/LoadingSpinner';
-import ErrorState from '@/components/UserUI/ErrorState';
 import ImageUpload from '@/components/ui/Upload';
 import { 
   LogOut, Ticket, Bell, Edit2, 
-  ChevronRight, Save, X, MapPin, Shield, LucideIcon, 
-  User, Smartphone, Mail, Lock
+  X, MapPin, Shield, LucideIcon, 
+  User, Smartphone, Mail, Lock, Save, ChevronRight
 } from 'lucide-react';
 
 // --- Interfaces ---
@@ -41,6 +40,14 @@ interface UpdateProfilePayload {
   [key: string]: unknown;
 }
 
+interface PageApiResponse<T> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  error?: string;
+  status?: number;
+}
+
 // --- Props & Components ---
 
 interface ChromeButtonProps {
@@ -61,10 +68,12 @@ interface InputFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   icon?: LucideIcon;
 }
 
+type StatColor = 'blue' | 'emerald' | 'purple' | 'pink';
+
 interface StatBlockProps {
   label: string;
   value: string | number;
-  color: 'blue' | 'emerald' | 'purple' | 'pink';
+  color: StatColor;
 }
 
 // --- Visual Components ---
@@ -155,14 +164,24 @@ const InputField = ({ label, icon: Icon, className, ...props }: InputFieldProps)
   </div>
 );
 
-const StatBlock = ({ label, value, color }: StatBlockProps) => (
-  <div className="flex flex-col items-center justify-center bg-[#13161c] border border-white/5 p-4 rounded-2xl relative overflow-hidden group hover:border-white/10 transition-colors">
-    <div className={`absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity duration-500 bg-${color}-500`} />
-    <span className={`text-2xl sm:text-3xl font-black text-white mb-1 z-10 drop-shadow-[0_0_10px_rgba(255,255,255,0.05)]`}>{value}</span>
-    <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider z-10">{label}</span>
-    <div className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-[2px] rounded-t-full bg-${color}-500 shadow-[0_-2px_10px_currentColor]`} />
-  </div>
-);
+const statColors: Record<StatColor, { bg: string; line: string }> = {
+  blue: { bg: 'bg-blue-500', line: 'bg-blue-500' },
+  emerald: { bg: 'bg-emerald-500', line: 'bg-emerald-500' },
+  purple: { bg: 'bg-purple-500', line: 'bg-purple-500' },
+  pink: { bg: 'bg-pink-500', line: 'bg-pink-500' },
+};
+
+const StatBlock = ({ label, value, color }: StatBlockProps) => {
+  const styles = statColors[color];
+  return (
+    <div className="flex flex-col items-center justify-center bg-[#13161c] border border-white/5 p-4 rounded-2xl relative overflow-hidden group hover:border-white/10 transition-colors">
+      <div className={`absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity duration-500 ${styles.bg}`} />
+      <span className="text-2xl sm:text-3xl font-black text-white mb-1 z-10 drop-shadow-[0_0_10px_rgba(255,255,255,0.05)]">{value}</span>
+      <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider z-10">{label}</span>
+      <div className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-[2px] rounded-t-full ${styles.line} shadow-[0_-2px_10px_currentColor]`} />
+    </div>
+  );
+};
 
 const LogoutModal = ({ isOpen, onClose, onConfirm }: { isOpen: boolean; onClose: () => void; onConfirm: () => void }) => {
   if (!isOpen) return null;
@@ -190,7 +209,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null); // Added error state
+  const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -204,40 +223,45 @@ export default function ProfilePage() {
     newPassword: ''
   });
 
-  const loadProfile = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.get<ProfileData>('/user/profile');
-      
-      if (response.success && response.data && response.data.user) {
-        setProfile(response.data);
-        setFormData({
-          name: response.data.user.name || '',
-          email: response.data.user.email || '',
-          mobile: response.data.user.mobile || '',
-          avatar: response.data.user.avatar,
-          currentPassword: '',
-          newPassword: ''
-        });
-      } else {
-        // FIX: Capture and display the real error (e.g., Unauthorized)
-        const errorMsg = typeof response.error === 'string' ? response.error : "Failed to load profile data";
-        setError(errorMsg);
-        
-        // Optional: Redirect if unauthorized
-        if (response.status === 401 || errorMsg.includes("Unauthorized")) {
-           router.push('/login');
-        }
-      }
-    } catch (e) {
-      console.error("Failed to load profile", e);
-      setError("An unexpected error occurred");
-    }
-    setLoading(false);
-  }, [router]);
+  useEffect(() => {
+    let isMounted = true;
 
-  useEffect(() => { loadProfile(); }, [loadProfile]);
+    async function fetchProfile() {
+      setLoading(true);
+      try {
+        // FIX: CHANGED '/api/user/profile' -> '/user/profile' (API client likely adds /api)
+        const response = await api.get('/user/profile') as unknown as PageApiResponse<ProfileData>;
+        
+        if (isMounted) {
+          if (response.success && response.data) {
+            setProfile(response.data);
+            setFormData({
+              name: response.data.user.name || '',
+              email: response.data.user.email || '',
+              mobile: response.data.user.mobile || '',
+              avatar: response.data.user.avatar,
+              currentPassword: '',
+              newPassword: ''
+            });
+          } else {
+             if (response.status === 401 || response.message?.includes('Unauthorized')) {
+               router.push('/login');
+               return;
+             }
+             setError(response.message || response.error || "Failed to load profile");
+          }
+        }
+      } catch (e) {
+        if (isMounted) setError("Network error occurred");
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    fetchProfile();
+
+    return () => { isMounted = false; };
+  }, [router]);
 
   async function handleUpdateProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -255,21 +279,31 @@ export default function ProfilePage() {
       payload.newPassword = formData.newPassword;
     }
 
-    const res = await api.patch('/me', payload as Record<string, unknown>);
-    
-    if (res.success) { 
-      setIsEditing(false); 
-      loadProfile(); 
-    } else { 
-      const errorMsg = typeof res.error === 'string' ? res.error : "Failed to update profile";
-      alert(errorMsg); 
+    try {
+      // FIX: CHANGED '/api/user/profile' -> '/user/profile'
+      const res = await api.patch('/user/profile', payload as Record<string, unknown>) as unknown as PageApiResponse<ProfileData>;
+      
+      if (res.success && res.data) { 
+        setIsEditing(false);
+        setProfile(prev => prev ? ({...prev, user: { ...prev.user, ...res.data?.user }}) : null);
+        setFormData(prev => ({...prev, currentPassword: '', newPassword: ''}));
+        alert("Profile updated successfully!");
+      } else { 
+        alert(res.message || res.error || "Failed to update profile"); 
+      }
+    } catch (e) {
+      alert("Failed to connect to server");
     }
     setIsSaving(false);
   }
 
   async function handleLogout() {
-    await api.post('/auth/logout');
-    router.push('/login');
+    try {
+      await api.post('/auth/logout');
+    } catch (e) {
+      console.error("Logout failed", e);
+    }
+    router.push('/signin');
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, field: keyof typeof formData) => {
@@ -277,13 +311,10 @@ export default function ProfilePage() {
   };
 
   if (loading) return <div className="min-h-screen bg-[#09090b] flex items-center justify-center"><LoadingSpinner /></div>;
-  
-  // FIX: Display specific error message
-  if (error) return <ErrorState message={error} onRetry={loadProfile} />;
-  
-  if (!profile) return <ErrorState message="Profile not found" onRetry={loadProfile} />;
+  if (!profile) return null;
 
-  const winRate = profile.stats.totalTickets > 0 
+// FIX: Added ?. to safely access stats
+  const winRate = profile.stats?.totalTickets > 0 
     ? ((profile.stats.winningTickets / profile.stats.totalTickets) * 100).toFixed(0) 
     : '0';
 
@@ -293,8 +324,7 @@ export default function ProfilePage() {
       <LogoutModal isOpen={showLogoutModal} onClose={() => setShowLogoutModal(false)} onConfirm={handleLogout} />
 
       <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-12">
-        
-        {/* === HEADER AREA === */}
+        {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
             <div className="text-center sm:text-left">
                 <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">My Profile</h1>
@@ -316,31 +346,25 @@ export default function ProfilePage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          
-          {/* === LEFT COLUMN: PROFILE CARD === */}
+          {/* Left Column */}
           <div className="lg:col-span-4 space-y-6">
             <div className="bg-[#12151d]/80 backdrop-blur-xl border border-white/5 rounded-3xl p-6 flex flex-col items-center text-center shadow-2xl relative overflow-hidden">
-               {/* Decorative Gradient Top */}
                <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-purple-500/10 to-transparent pointer-events-none"/>
-
-              {/* Avatar */}
               <div className="relative mb-5 mt-4">
                   <div className="absolute -inset-4 bg-gradient-to-tr from-purple-500 to-blue-500 rounded-full opacity-30 blur-lg animate-pulse" />
                   <div className="relative w-28 h-28 rounded-full overflow-hidden border-4 border-[#12151d] shadow-2xl bg-[#0B0E14]">
                       <img 
-                        src={profile.user.avatar || `https://ui-avatars.com/api/?name=${profile.user.name}&background=12151d&color=fff`} 
+src={profile.user?.avatar || `https://ui-avatars.com/api/?name=${profile.user?.name || 'User'}&background=12151d&color=fff`}
                         alt="Profile" 
                         className="w-full h-full object-cover" 
                       />
                   </div>
               </div>
-
-              <h2 className="text-xl font-bold text-white mb-1">{profile.user.name}</h2>
-              <p className="text-[10px] text-purple-400 font-mono bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/20 mb-6 tracking-wide">
-                ID: {profile.user.id.slice(-6).toUpperCase()}
-              </p>
-
-              {/* Badges */}
+             {/* Update these lines below the image as well */}
+<h2 className="text-xl font-bold text-white mb-1">{profile.user?.name}</h2>
+<p className="text-[10px] text-purple-400 font-mono bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/20 mb-6 tracking-wide">
+  ID: {profile.user?.id?.slice(-6).toUpperCase()}
+</p>
               <div className="grid grid-cols-2 gap-3 w-full">
                  <div className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#0B0E14] border border-white/5 text-[10px] font-bold text-gray-300">
                     <Shield size={14} className="text-emerald-400" />
@@ -354,11 +378,9 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* === RIGHT COLUMN: CONTENT === */}
+          {/* Right Column */}
           <div className="lg:col-span-8">
-            
             {isEditing ? (
-              /* --- EDIT FORM --- */
               <form onSubmit={handleUpdateProfile} className="bg-[#12151d]/80 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-white/5 animate-in fade-in slide-in-from-bottom-4">
                   <div className="flex items-center gap-4 mb-8 pb-6 border-b border-white/5">
                       <div className="p-3 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
@@ -369,11 +391,9 @@ export default function ProfilePage() {
                           <p className="text-xs text-gray-400">Make changes to your personal information.</p>
                       </div>
                   </div>
-
                   <div className="flex justify-center mb-8">
                       <ImageUpload value={formData.avatar} onChange={(b64: string | null) => setFormData({...formData, avatar: b64})} />
                   </div>
-
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
                       <InputField 
                         label="Full Name" 
@@ -388,7 +408,6 @@ export default function ProfilePage() {
                         onChange={(e) => handleInputChange(e, 'mobile')} 
                       />
                   </div>
-                  
                   <div className="mb-8">
                       <InputField 
                         label="Email Address" 
@@ -397,7 +416,6 @@ export default function ProfilePage() {
                         onChange={(e) => handleInputChange(e, 'email')} 
                       />
                   </div>
-
                   <div className="bg-[#0f1218] p-5 rounded-2xl border border-white/5 mb-8">
                     <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                         <Shield size={12} className="text-orange-400"/> Security (Optional)
@@ -423,7 +441,6 @@ export default function ProfilePage() {
                         </div>
                     </div>
                   </div>
-
                   <div className="flex justify-end gap-3 pt-2 border-t border-white/5">
                       <button 
                         type="button" 
@@ -432,33 +449,25 @@ export default function ProfilePage() {
                       >
                         Cancel
                       </button>
-                      
                       <BezelButton type="submit" disabled={isSaving} icon={Save} className="w-full sm:w-auto">
                           {isSaving ? 'Saving...' : 'Save Changes'}
                       </BezelButton>
                   </div>
               </form>
             ) : (
-              /* --- DASHBOARD MODE --- */
               <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-                  
-                  {/* Stats Grid */}
                   <div className="grid grid-cols-3 gap-3">
-                      <StatBlock label="Tickets" value={profile.stats.totalTickets} color="blue" />
-                      <StatBlock label="Wins" value={profile.stats.winningTickets} color="emerald" />
+<StatBlock label="Tickets" value={profile.stats?.totalTickets ?? 0} color="blue" />
+<StatBlock label="Wins" value={profile.stats?.winningTickets ?? 0} color="emerald" />
+
                       <StatBlock label="Win Rate" value={`${winRate}%`} color="purple" />
                   </div>
-
-                  {/* Navigation Cards */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      
-                      {/* Ticket History Card */}
                       <div 
                         onClick={() => router.push('/user/tickets')}
                         className="group relative cursor-pointer h-36 rounded-2xl bg-[#12151d] border border-white/5 p-5 flex flex-col justify-between overflow-hidden transition-all hover:-translate-y-1 hover:border-purple-500/30 hover:shadow-lg"
                       >
                           <div className="absolute -right-10 -top-10 w-32 h-32 bg-purple-600/10 blur-[50px] group-hover:bg-purple-600/20 transition-colors" />
-                          
                           <div className="w-10 h-10 rounded-lg bg-[#1a1f29] border border-white/5 flex items-center justify-center text-purple-400 shadow-sm group-hover:scale-110 transition-transform">
                               <Ticket size={20} />
                           </div>
@@ -470,38 +479,33 @@ export default function ProfilePage() {
                               <p className="text-[11px] text-gray-500 mt-1">View active draws & history</p>
                           </div>
                       </div>
-
-                      {/* Notifications Card */}
                       <div 
                         onClick={() => router.push('/user/notifications')}
                         className="group relative cursor-pointer h-36 rounded-2xl bg-[#12151d] border border-white/5 p-5 flex flex-col justify-between overflow-hidden transition-all hover:-translate-y-1 hover:border-blue-500/30 hover:shadow-lg"
                       >
                            <div className="absolute -right-10 -top-10 w-32 h-32 bg-blue-600/10 blur-[50px] group-hover:bg-blue-600/20 transition-colors" />
-
                           <div className="w-10 h-10 rounded-lg bg-[#1a1f29] border border-white/5 flex items-center justify-center text-blue-400 shadow-sm group-hover:scale-110 transition-transform relative">
                               <Bell size={20} />
-                              {profile.stats.unreadNotifications > 0 && (
+{(profile.stats?.unreadNotifications ?? 0) > 0 && (
                                 <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-[#1a1f29]" />
                               )}
                           </div>
                           <div>
                               <div className="flex justify-between items-center">
                                   <h3 className="text-sm font-bold text-white group-hover:text-blue-300 transition-colors">Notifications</h3>
-                                  {profile.stats.unreadNotifications > 0 && (
+{(profile.stats?.unreadNotifications ?? 0) > 0 && (
                                     <span className="bg-red-500/10 text-red-400 text-[9px] font-bold px-1.5 py-0.5 rounded border border-red-500/20">
-                                        {profile.stats.unreadNotifications} NEW
+{profile.stats?.unreadNotifications ?? 0} NEW
                                     </span>
                                   )}
                               </div>
                               <p className="text-[11px] text-gray-500 mt-1">Updates on your wins</p>
                           </div>
                       </div>
-
                   </div>
               </div>
             )}
           </div>
-
         </div>
       </div>
     </div>

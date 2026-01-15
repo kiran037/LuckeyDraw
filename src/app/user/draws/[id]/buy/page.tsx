@@ -1,16 +1,31 @@
-// src/app/user/draws/[id]/buy/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api-client';
-import { Draw } from '@/lib/types';
-import { formatCurrency } from '@/lib/utils';
-import { getImageUrl } from '@/lib/image';
 import LoadingSpinner from '@/components/UserUI/LoadingSpinner';
 import ErrorState from '@/components/UserUI/ErrorState';
 import ImageUpload from '@/components/ui/Upload';
-import { ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, AlertCircle, QrCode } from 'lucide-react';
+import { formatCurrency } from '@/lib/utils';
+
+// Replace this with your actual Admin QR Code URL
+const ADMIN_QR_CODE = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=upi://pay?pa=admin@upi&pn=DrawApp"; 
+
+interface Draw {
+  id: string;
+  title: string;
+  entryFee: number;
+  status: string;
+  bannerImage: string | null;
+}
+
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  error?: string;
+}
 
 export default function BuyTicketPage() {
   const params = useParams();
@@ -25,70 +40,70 @@ export default function BuyTicketPage() {
   const [screenshot, setScreenshot] = useState<string | null>(null);
 
   useEffect(() => {
-    if (params.id) {
-      api.get<Draw>(`/user/draws/${params.id}`).then(res => {
-        if(res.success && res.data?.status === 'LIVE') {
-          setDraw(res.data);
-        }
+    async function load() {
+      if (params.id) {
+        try {
+          // Reusing the same details API, but we just need basic info
+const res = await api.get<Draw>(`/user/draws/${params.id}`);
+          if(res.success && res.data?.status === 'LIVE') {
+            setDraw(res.data);
+          } else {
+            setError("Draw unavailable");
+          }
+        } catch(e) { setError("Network error"); }
         setLoading(false);
-      });
+      }
     }
+    load();
   }, [params.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     
-    if (!transactionId.trim()) {
-      setError('Transaction ID is required');
-      return;
-    }
-    
-    if (!screenshot) {
-      setError('Payment screenshot is required');
-      return;
-    }
+    if (!transactionId.trim()) { setError('Transaction ID is required'); return; }
+    if (!screenshot) { setError('Payment screenshot is required'); return; }
     
     setSubmitting(true);
     
     try {
-      const res = await api.post('/user/tickets', { 
+      // FIX: Post to the new manual submit route
+      const res = await api.post('/user/payments/submit', { 
         drawId: params.id, 
         transactionId: transactionId.trim(), 
         screenshot 
-      });
+}) as ApiResponse<unknown>;
       
       if (res.success) {
         setSuccess(true);
         setTimeout(() => {
-          router.push('/user/tickets');
-        }, 2000);
+          router.push('/user/tickets'); // Or back to draw details
+        }, 3000);
       } else {
-        setError(res.error || 'Failed to submit payment');
+        setError(res.message || res.error || 'Failed to submit payment');
       }
     } catch (err) {
       setError('Network error. Please try again.');
-      console.error(err);
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (loading) return <LoadingSpinner />;
-  if (!draw) return <ErrorState message="Draw unavailable or not accepting entries" />;
+  if (loading) return <div className="min-h-screen bg-[#09090b] flex items-center justify-center"><LoadingSpinner /></div>;
+  if (!draw) return <ErrorState message="Draw unavailable" />;
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl p-8 text-center shadow-xl">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle size={40} className="text-green-600" />
+      <div className="min-h-screen bg-[#09090b] flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-[#151922] border border-white/10 rounded-3xl p-8 text-center shadow-xl">
+          <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <CheckCircle size={40} className="text-green-500" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-3">Payment Submitted!</h2>
-          <p className="text-gray-600 mb-6">
+          <h2 className="text-2xl font-bold text-white mb-3">Payment Submitted!</h2>
+          <p className="text-gray-400 mb-6">
             Your payment is under review. You'll receive your ticket once approved by admin.
           </p>
-          <div className="animate-pulse text-purple-600 text-sm">
+          <div className="animate-pulse text-purple-400 text-sm">
             Redirecting to tickets...
           </div>
         </div>
@@ -96,108 +111,77 @@ export default function BuyTicketPage() {
     );
   }
 
-  const imageUrl = getImageUrl(draw.bannerImage || draw.products?.[0]?.image);
-
   return (
-    <div className="min-h-screen bg-gray-50 p-6 pb-24">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-screen bg-[#09090b] text-white p-6 pb-24">
+      <div className="max-w-xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8 pt-4">
           <button 
             onClick={() => router.back()} 
-            className="p-2 bg-white rounded-full shadow-sm text-gray-600 hover:bg-gray-50"
+            className="p-2 bg-[#151922] border border-white/10 rounded-full text-gray-400 hover:text-white transition-colors"
           >
             <ArrowLeft size={20} />
           </button>
-          <h1 className="text-xl font-bold text-gray-900">Complete Payment</h1>
+          <h1 className="text-xl font-bold">Complete Payment</h1>
         </div>
 
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
-            <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-2xl p-4 flex items-start gap-3">
+            <AlertCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-200">{error}</p>
           </div>
         )}
 
-        {/* Draw Summary Card */}
-        <div className="bg-white rounded-3xl overflow-hidden shadow-lg mb-6">
-          <div className="relative h-48">
-            <img 
-              src={imageUrl}
-              alt={draw.title}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = '/placeholder-image.png';
-              }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-            <div className="absolute bottom-4 left-4 right-4">
-              <h3 className="text-white font-bold text-lg mb-1">{draw.title}</h3>
-            </div>
-          </div>
-          
-          <div className="p-6 bg-gradient-to-br from-purple-600 to-pink-600 text-white">
-            <p className="text-white/80 text-sm mb-1">Total Amount</p>
-            <p className="text-4xl font-bold">{formatCurrency(draw.entryFee)}</p>
-          </div>
+        {/* Amount Card */}
+        <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-3xl p-6 mb-6 shadow-lg shadow-purple-900/20">
+            <p className="text-white/80 text-sm mb-1">Total Payable</p>
+            <h2 className="text-4xl font-black text-white">{formatCurrency(draw.entryFee)}</h2>
+            <p className="text-white/60 text-xs mt-2">{draw.title}</p>
         </div>
 
-        {/* Payment Instructions */}
-        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-6">
-          <h4 className="font-bold text-blue-900 mb-2">Payment Instructions</h4>
-          <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-            <li>Make payment via UPI/Bank Transfer</li>
-            <li>Note down your transaction ID</li>
-            <li>Upload payment screenshot below</li>
-            <li>Submit for verification</li>
-          </ol>
+        {/* QR Section */}
+        <div className="bg-[#151922] border border-white/5 rounded-2xl p-6 mb-6 text-center">
+          <h4 className="font-bold text-white mb-4">Scan to Pay</h4>
+          <div className="bg-white p-4 rounded-xl inline-block mb-4">
+             <img src={ADMIN_QR_CODE} alt="Admin QR" className="w-40 h-40" />
+          </div>
+          <p className="text-xs text-gray-400">
+             Scan using any UPI app (GPay, PhonePe, Paytm)
+          </p>
         </div>
 
-        {/* Payment Form */}
+        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="bg-white rounded-3xl p-6 shadow-sm">
-            <label className="block text-sm font-bold text-gray-700 mb-3">
-              Transaction ID / Reference Number
+          <div className="bg-[#151922] border border-white/5 rounded-3xl p-6">
+            <label className="block text-sm font-bold text-gray-400 mb-3">
+              Transaction ID (UTR)
             </label>
             <input
               type="text"
               value={transactionId}
               onChange={(e) => setTransactionId(e.target.value)}
-              placeholder="e.g., UPI123456789 or TXN987654321"
-              className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-gray-800 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+              placeholder="e.g., 34568912300"
+              className="w-full bg-[#0B0E14] border border-white/10 rounded-2xl px-4 py-3 text-white focus:border-purple-500 outline-none transition-all"
               required
               disabled={submitting}
             />
           </div>
 
-          <div className="bg-white rounded-3xl p-6 shadow-sm">
+          <div className="bg-[#151922] border border-white/5 rounded-3xl p-6">
             <ImageUpload
-              label="Payment Screenshot"
               value={screenshot}
               onChange={setScreenshot}
-              required
             />
           </div>
 
           <button
             type="submit"
             disabled={submitting || !transactionId.trim() || !screenshot}
-            className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-[1.5rem] font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-xl hover:scale-[1.02] transition-all"
+            className="w-full py-4 bg-white text-black rounded-[1.5rem] font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-all"
           >
-            {submitting ? (
-              <span className="flex items-center justify-center gap-2">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
-                Submitting...
-              </span>
-            ) : (
-              'Submit Payment'
-            )}
+            {submitting ? 'Submitting...' : 'Submit Payment'}
           </button>
         </form>
-
-        <p className="text-center text-xs text-gray-500 mt-6">
-          Your ticket will be generated after admin approval
-        </p>
       </div>
     </div>
   );

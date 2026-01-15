@@ -2,7 +2,8 @@
 import { cookies } from "next/headers";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { prisma } from "./prisma";
-import { user_role } from "../generated/client/client";
+// ADJUST THIS PATH IF YOUR PRISMA CLIENT IS ELSEWHERE (e.g., @prisma/client)
+import { user_role } from "@/generated/client/client"; 
 
 /* -------------------- Types -------------------- */
 
@@ -107,8 +108,5 @@ export async function setAuthCookie(token: string): Promise<void> {
 
 export async function clearAuthCookie(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.delete({
-    name: "token",
-    path: "/",
-  });
+  cookieStore.delete("token");
 }

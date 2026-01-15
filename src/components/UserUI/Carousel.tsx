@@ -6,8 +6,16 @@ import { formatCurrency, getTimeRemaining } from '@/lib/utils';
 import Link from 'next/link';
 import { ChevronRight, Clock } from 'lucide-react';
 
+// FIX: Define a local type that extends Draw to include _count
+type DrawWithCount = Draw & {
+  _count?: {
+    ticket: number;
+  };
+};
+
 interface CarouselProps {
-  draws: Draw[];
+  // Use the extended type here
+  draws: DrawWithCount[];
 }
 
 export default function Carousel({ draws }: CarouselProps) {
@@ -23,6 +31,8 @@ export default function Carousel({ draws }: CarouselProps) {
 
   if (draws.length === 0) return null;
   const currentDraw = draws[currentIndex];
+  
+  // TypeScript will now recognize _count
   const progress = currentDraw._count ? (currentDraw._count.ticket / currentDraw.maxTickets) * 100 : 0;
 
   return (

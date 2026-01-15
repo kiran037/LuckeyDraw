@@ -1,17 +1,24 @@
-
-
 'use client';
 
 import { Draw } from '@/lib/types';
 import { formatCurrency, getTimeRemaining } from '@/lib/utils';
 import Link from 'next/link';
 
+// FIX: Define a local type that extends Draw to include _count
+type DrawWithCount = Draw & {
+  _count?: {
+    ticket: number;
+  };
+};
+
 interface DrawCardProps {
-  draw: Draw;
+  // Use the extended type here
+  draw: DrawWithCount;
 }
 
 export default function DrawCard({ draw }: DrawCardProps) {
   const timeRemaining = getTimeRemaining(draw.endTime);
+  // TypeScript now knows _count exists
   const ticketProgress = draw._count ? (draw._count.ticket / draw.maxTickets) * 100 : 0;
 
   return (

@@ -1,42 +1,35 @@
 // src/proxy.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import jwt from "jsonwebtoken";
-import { user_role } from "./generated/client/enums";
+import { jwtVerify } from "jose"; // npm install jose
 
-/* ===================== TYPES ===================== */
-
-interface AppJwtPayload {
-  userId: string;
-  role: user_role;
-}
-
-/* ===================== PROXY ===================== */
+/* ===================== CONFIG ===================== */
+// Define roles locally to avoid importing Prisma Client (which crashes Edge Runtime)
+const USER_ROLE = {
+  USER: "USER",
+  ADMIN: "ADMIN",
+} as const;
 
 export async function proxy(request: NextRequest) {
   const token = request.cookies.get("token")?.value;
   const { pathname } = request.nextUrl;
 
+  // Use TextEncoder for jose
+  const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+
   /* ---------- AUTH PAGES ---------- */
-  // If user is on signin and already logged in, redirect based on role
   if (pathname === "/signin") {
     if (token) {
       try {
-        const decoded = jwt.verify(
-          token,
-          process.env.JWT_SECRET as string
-        ) as AppJwtPayload;
+        const { payload } = await jwtVerify(token, secret);
 
-        // Redirect based on role
-        if (decoded.role === user_role.ADMIN) {
-          return NextResponse.redirect(
-            new URL("/admin/dashboard", request.url)
-          );
+        if (payload.role === USER_ROLE.ADMIN) {
+          return NextResponse.redirect(new URL("/admin/dashboard", request.url));
         } else {
           return NextResponse.redirect(new URL("/", request.url));
         }
-      } catch {
-        // Invalid token → allow access to auth pages
+      } catch (e) {
+        // Invalid token, allow access to signin
       }
     }
     return NextResponse.next();
@@ -44,101 +37,69 @@ export async function proxy(request: NextRequest) {
 
   /* ---------- ADMIN AREA ---------- */
   if (pathname.startsWith("/admin")) {
-    if (!token) {
-      return NextResponse.redirect(
-        new URL("/signin?mode=login&redirect=" + pathname, request.url)
-      );
-    }
+    if (!token) return redirectToLogin(request);
 
     try {
-      const decoded = jwt.verify(
-        token,
-        process.env.JWT_SECRET as string
-      ) as AppJwtPayload;
+      const { payload } = await jwtVerify(token, secret);
 
-      // Only ADMIN can access admin routes
-      if (decoded.role !== user_role.ADMIN) {
+      if (payload.role !== USER_ROLE.ADMIN) {
         return NextResponse.redirect(new URL("/", request.url));
       }
-
       return NextResponse.next();
-    } catch {
-      const response = NextResponse.redirect(
-        new URL("/signin?mode=login", request.url)
-      );
-
-      response.cookies.delete({
-        name: "token",
-        path: "/",
-      });
-
-      return response;
+    } catch (e) {
+      return logoutAndRedirect(request);
     }
   }
 
   /* ---------- USER AREA ---------- */
-  // User routes require authentication (both USER and ADMIN can access)
   if (pathname.startsWith("/user")) {
-    if (!token) {
-      return NextResponse.redirect(
-        new URL("/signin?mode=login&redirect=" + pathname, request.url)
-      );
-    }
+    if (!token) return redirectToLogin(request);
 
     try {
-      // Verify token is valid (both USER and ADMIN roles can access)
-      jwt.verify(token, process.env.JWT_SECRET as string);
+      await jwtVerify(token, secret);
       return NextResponse.next();
-    } catch {
-      const response = NextResponse.redirect(
-        new URL("/signin?mode=login", request.url)
-      );
-
-      response.cookies.delete({
-        name: "token",
-        path: "/",
-      });
-
-      return response;
+    } catch (e) {
+      return logoutAndRedirect(request);
     }
   }
 
   /* ---------- API ADMIN ROUTES ---------- */
   if (pathname.startsWith("/api/admin")) {
     if (!token) {
-      return NextResponse.json(
-        { success: false, message: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
     try {
-      const decoded = jwt.verify(
-        token,
-        process.env.JWT_SECRET as string
-      ) as AppJwtPayload;
+      const { payload } = await jwtVerify(token, secret);
 
-      // Only ADMIN can access admin API routes
-      if (decoded.role !== user_role.ADMIN) {
+      if (payload.role !== USER_ROLE.ADMIN) {
         return NextResponse.json(
           { success: false, message: "Forbidden - Admin access required" },
           { status: 403 }
         );
       }
-
       return NextResponse.next();
-    } catch {
-      return NextResponse.json(
-        { success: false, message: "Invalid token" },
-        { status: 401 }
-      );
+    } catch (e) {
+      return NextResponse.json({ success: false, message: "Invalid token" }, { status: 401 });
     }
   }
 
   return NextResponse.next();
 }
 
-/* ===================== CONFIG ===================== */
+// Helper: Redirect to Login
+function redirectToLogin(request: NextRequest) {
+  return NextResponse.redirect(
+    new URL("/signin?mode=login&redirect=" + request.nextUrl.pathname, request.url)
+  );
+}
+
+// Helper: Clear cookie and redirect
+function logoutAndRedirect(request: NextRequest) {
+  const response = NextResponse.redirect(new URL("/signin?mode=login", request.url));
+  response.cookies.delete("token");
+  return response;
+}
 
 export const config = {
   matcher: [

@@ -1,3 +1,4 @@
+///Users/xeoren/Desktop/draw/src/lib/prisma.ts
 import "dotenv/config";
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { PrismaClient } from "@/generated/client/client";
