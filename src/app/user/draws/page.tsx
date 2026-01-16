@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api-client';
 import { formatCurrency, getTimeRemaining } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Trophy, Calendar, Clock, AlertCircle, Loader2 } from 'lucide-react';
+import { getImageUrl } from '@/lib/image-helper';
 
 // --- Types ---
 
@@ -59,7 +60,7 @@ const DrawCard = ({ draw }: { draw: Draw }) => {
         <div className="relative h-48 bg-gray-100 dark:bg-[#0B0E14] overflow-hidden">
           {draw.bannerImage || (draw.drawproduct[0]?.image) ? (
             <img 
-              src={draw.bannerImage || draw.drawproduct[0]?.image || ''} 
+              src={getImageUrl(draw.bannerImage) || getImageUrl(draw.drawproduct[0]?.image) || ''} 
               alt={draw.title} 
               className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
             />

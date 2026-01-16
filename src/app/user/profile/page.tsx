@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api-client';
-import ImageUpload from '@/components/LandingUI/Upload'; // Keep your existing upload component
+import { ImageUploader } from '@/components/AdminUI/ui/ImageUploader';
 import { 
   LogOut, Edit2, X, MapPin, Shield, User, Smartphone, 
   Mail, Lock, ChevronRight, Bell, Ticket, Loader2
@@ -12,6 +12,7 @@ import {
   BentoCard, ProfileInput, ActionButton, IconButton 
 } from '@/components/LandingUI/ProfilePrimitives';
 import StatsGrid from '@/components/LandingUI/User/Profile/StatsGrid';
+import { getImageUrl } from '@/lib/image-helper';
 
 interface UpdateProfilePayload {
   name: string;
@@ -20,7 +21,6 @@ interface UpdateProfilePayload {
   avatar: string | null;
   currentPassword?: string;
   newPassword?: string;
-  // This line fixes the "Index signature" error:
   [key: string]: unknown; 
 }
 
@@ -62,7 +62,7 @@ export default function ProfilePage() {
     name: '',
     email: '',
     mobile: '',
-    avatar: null as string | null,
+    avatar: '',
     currentPassword: '',
     newPassword: ''
   });
@@ -80,7 +80,7 @@ export default function ProfilePage() {
               name: response.data.user.name || '',
               email: response.data.user.email || '',
               mobile: response.data.user.mobile || '',
-              avatar: response.data.user.avatar,
+              avatar: response.data.user.avatar || '',
               currentPassword: '',
               newPassword: ''
             });
@@ -104,12 +104,12 @@ export default function ProfilePage() {
     e.preventDefault();
     setIsSaving(true);
 
-const payload: UpdateProfilePayload = {
-  name: formData.name,
-  email: formData.email,
-  mobile: formData.mobile,
-  avatar: formData.avatar
-};
+    const payload: UpdateProfilePayload = {
+      name: formData.name,
+      email: formData.email,
+      mobile: formData.mobile,
+      avatar: formData.avatar || null
+    };
 
     if (formData.newPassword) {
       payload.currentPassword = formData.currentPassword;
@@ -192,7 +192,7 @@ const payload: UpdateProfilePayload = {
                   <div className="absolute -inset-1 bg-gradient-to-tr from-purple-500 to-pink-500 rounded-full opacity-70 blur-sm" />
                   <div className="relative w-32 h-32 rounded-full overflow-hidden border-4 border-white dark:border-[#151925] bg-gray-100 dark:bg-[#0B0E14]">
                       <img 
-                        src={profile.user?.avatar || `https://ui-avatars.com/api/?name=${profile.user?.name}&background=random`}
+                        src={getImageUrl(profile.user?.avatar)}
                         alt="Profile" 
                         className="w-full h-full object-cover" 
                       />
@@ -242,10 +242,13 @@ const payload: UpdateProfilePayload = {
 
                   <form onSubmit={handleUpdateProfile} className="space-y-6">
                       <div className="flex justify-center mb-6">
-                         {/* Passed classname to make it fit bento style if wrapper supports it */}
-                         <div className="relative group">
-                            <ImageUpload value={formData.avatar} onChange={(b64: string | null) => setFormData({...formData, avatar: b64})} />
-                            <p className="text-[10px] text-center text-gray-400 mt-2">Tap to change</p>
+                         <div className="relative group w-full max-w-xs">
+                            <ImageUploader 
+                              value={formData.avatar} 
+                              onChange={(path: string) => setFormData({...formData, avatar: path})}
+                              folder="avatars"
+                              label="Profile Picture"
+                            />
                          </div>
                       </div>
 
@@ -313,7 +316,7 @@ const payload: UpdateProfilePayload = {
                       {/* My Tickets Card */}
                       <BentoCard 
                         onClick={() => router.push('/user/tickets')}
-                        className="group relative h-40 flex flex-col justify-between overflow-hidden !p-6"
+                        className="group relative h-40 flex flex-col justify-between overflow-hidden !p-6 cursor-pointer"
                       >
                           <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
                              <Ticket size={64} className="text-purple-500" />
@@ -339,7 +342,7 @@ const payload: UpdateProfilePayload = {
                       {/* Notifications Card */}
                       <BentoCard 
                         onClick={() => router.push('/user/notifications')}
-                        className="group relative h-40 flex flex-col justify-between overflow-hidden !p-6"
+                        className="group relative h-40 flex flex-col justify-between overflow-hidden !p-6 cursor-pointer"
                       >
                           <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
                              <Bell size={64} className="text-blue-500" />

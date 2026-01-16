@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api-client';
-import ImageUpload from '@/components/LandingUI/Upload'; // Ensure this component exists & handles themes
+import { ImageUploader } from '@/components/AdminUI/ui/ImageUploader';
 import { ArrowLeft, CheckCircle, AlertCircle, Loader2, CreditCard, UploadCloud } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
@@ -37,7 +37,7 @@ export default function BuyTicketPage() {
   
   // Form State
   const [transactionId, setTransactionId] = useState('');
-  const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [screenshot, setScreenshot] = useState<string>('');
 
   useEffect(() => {
     async function load() {
@@ -63,8 +63,14 @@ export default function BuyTicketPage() {
     e.preventDefault();
     setError(null);
     
-    if (!transactionId.trim()) { setError('Please enter the Transaction ID (UTR).'); return; }
-    if (!screenshot) { setError('Please upload the payment screenshot.'); return; }
+    if (!transactionId.trim()) { 
+      setError('Please enter the Transaction ID (UTR).'); 
+      return; 
+    }
+    if (!screenshot) { 
+      setError('Please upload the payment screenshot.'); 
+      return; 
+    }
     
     setSubmitting(true);
     
@@ -104,8 +110,13 @@ export default function BuyTicketPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-[#09090b] flex flex-col items-center justify-center p-6 text-center">
        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
        <h3 className="text-xl font-bold text-gray-900 dark:text-white">Unavailable</h3>
-       <p className="text-gray-500 mt-2">{error || "Draw details not found."}</p>
-       <button onClick={() => router.back()} className="mt-6 text-sm underline text-gray-500">Go Back</button>
+       <p className="text-gray-500 dark:text-gray-400 mt-2">{error || "Draw details not found."}</p>
+       <button 
+         onClick={() => router.back()} 
+         className="mt-6 px-6 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-black rounded-xl font-medium hover:scale-105 transition-transform"
+       >
+         Go Back
+       </button>
     </div>
   );
 
@@ -138,6 +149,7 @@ export default function BuyTicketPage() {
           <button 
             onClick={() => router.back()} 
             className="p-2.5 bg-white dark:bg-[#151922] border border-gray-200 dark:border-white/10 rounded-xl text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors shadow-sm"
+            aria-label="Go back"
           >
             <ArrowLeft size={20} />
           </button>
@@ -164,7 +176,7 @@ export default function BuyTicketPage() {
             <CreditCard size={18} className="text-purple-600" /> Scan QR to Pay
           </h4>
           <div className="bg-gray-50 dark:bg-white p-4 rounded-2xl inline-block mb-4 border border-gray-200 dark:border-transparent">
-             <img src={ADMIN_QR_CODE} alt="Admin QR" className="w-40 h-40 mix-blend-multiply" />
+             <img src={ADMIN_QR_CODE} alt="Admin Payment QR Code" className="w-40 h-40 mix-blend-multiply" />
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium bg-gray-100 dark:bg-white/5 py-2 px-4 rounded-full inline-block">
              Use GPay, PhonePe, or Paytm
@@ -176,15 +188,16 @@ export default function BuyTicketPage() {
           
           {/* UTR Input */}
           <div className="bg-white dark:bg-[#151922] border border-gray-200 dark:border-white/5 rounded-3xl p-5 shadow-sm">
-            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3 ml-1">
+            <label htmlFor="transaction-id" className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3 ml-1">
               Transaction ID / UTR Number
             </label>
             <input
+              id="transaction-id"
               type="text"
               value={transactionId}
               onChange={(e) => setTransactionId(e.target.value)}
               placeholder="e.g., 34568912300"
-              className="w-full bg-gray-50 dark:bg-[#0B0E14] border border-gray-200 dark:border-white/10 rounded-2xl px-4 py-3.5 text-gray-900 dark:text-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition-all font-mono text-sm"
+              className="w-full bg-gray-50 dark:bg-[#0B0E14] border border-gray-200 dark:border-white/10 rounded-2xl px-4 py-3.5 text-gray-900 dark:text-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all font-mono text-sm"
               required
               disabled={submitting}
             />
@@ -195,13 +208,21 @@ export default function BuyTicketPage() {
 
           {/* Screenshot Upload */}
           <div className="bg-white dark:bg-[#151922] border border-gray-200 dark:border-white/5 rounded-3xl p-5 shadow-sm">
-            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3 ml-1 flex items-center gap-2">
-               <UploadCloud size={16} /> Upload Screenshot
-            </label>
-            <ImageUpload
+            <div className="flex items-center gap-2 mb-3 ml-1">
+              <UploadCloud size={16} className="text-gray-700 dark:text-gray-300" />
+              <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                Upload Payment Screenshot
+              </span>
+            </div>
+            <ImageUploader
               value={screenshot}
               onChange={setScreenshot}
+              folder="payments"
+              label=""
             />
+            <p className="text-[10px] text-gray-400 mt-2 ml-1">
+              Clear screenshot showing transaction details and UTR number
+            </p>
           </div>
 
           {/* Submit Button */}

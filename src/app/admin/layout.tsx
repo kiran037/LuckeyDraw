@@ -36,7 +36,7 @@ export default async function AdminLayout({
         
         {/* Main Content: Scrollable area */}
         <main className="flex-1 overflow-y-auto scroll-smooth p-6 md:p-8">
-          <div className="mx-auto max-w-7xl animate-in fade-in duration-500">
+          <div className="mx-auto w-full animate-in fade-in duration-500">
             {children}
           </div>
         </main>

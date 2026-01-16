@@ -6,6 +6,7 @@ import { ChevronRight, Clock, ArrowRight } from 'lucide-react';
 import { Draw } from '@/lib/types';
 import { formatCurrency, getTimeRemaining } from '@/lib/utils';
 import { SectionHeader } from '@/components/LandingUI/HomePrimitives';
+import { getImageUrl } from "@/lib/image-helper";
 
 interface LiveDrawsSectionProps {
   draws?: Draw[]; 
@@ -111,7 +112,7 @@ export default function LiveDrawsSection({ draws = [] }: LiveDrawsSectionProps) 
                   <div className="relative h-36 sm:h-52 bg-gray-100 dark:bg-[#0B0E14] overflow-hidden">
                     {displayImage ? (
                       <img
-                        src={displayImage}
+                        src={getImageUrl(displayImage)}
                         alt={draw.title}
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                       />

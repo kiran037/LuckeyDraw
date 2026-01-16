@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Save, User, Lock, Mail, Phone, Ticket, Trophy, Bell, Loader2 } from "lucide-react";
+import { Save, User, Lock, Mail, Phone, Loader2 } from "lucide-react";
 import { Button } from "@/components/AdminUI/ui/Button";
 import { Input } from "@/components/AdminUI/ui/Input";
 import { ImageUploader } from "@/components/AdminUI/ui/ImageUploader";
@@ -18,7 +18,6 @@ interface ProfileUpdatePayload {
   confirmPassword?: string;
 }
 
-// Types matching your API response
 interface UserStats {
   totalTickets: number;
   winningTickets: number;
@@ -39,12 +38,11 @@ interface ProfileFormProps {
   stats: UserStats;
 }
 
-export default function ProfileForm({ user, stats }: ProfileFormProps) {
+export default function ProfileForm({ user }: ProfileFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Form State
   const [formData, setFormData] = useState({
     name: user.name || "",
     email: user.email || "",
@@ -52,7 +50,6 @@ export default function ProfileForm({ user, stats }: ProfileFormProps) {
     avatar: user.avatar || null,
   });
 
-  // Password State
   const [passwords, setPasswords] = useState({
     currentPassword: "",
     newPassword: "",
@@ -67,12 +64,10 @@ export default function ProfileForm({ user, stats }: ProfileFormProps) {
     setPasswords((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     setMessage(null);
     setLoading(true);
 
-    // Basic Validation
     if (passwords.newPassword && passwords.newPassword !== passwords.confirmPassword) {
       setMessage({ type: 'error', text: "New passwords do not match" });
       setLoading(false);
@@ -85,15 +80,32 @@ export default function ProfileForm({ user, stats }: ProfileFormProps) {
       return;
     }
 
+    if (passwords.newPassword && passwords.newPassword.length < 8) {
+      setMessage({ type: 'error', text: "New password must be at least 8 characters long" });
+      setLoading(false);
+      return;
+    }
+
+    if (!formData.name.trim()) {
+      setMessage({ type: 'error', text: "Name is required" });
+      setLoading(false);
+      return;
+    }
+
+    if (!formData.email.trim()) {
+      setMessage({ type: 'error', text: "Email is required" });
+      setLoading(false);
+      return;
+    }
+
     try {
-    const payload: ProfileUpdatePayload = {
-        name: formData.name,
-        email: formData.email,
-        mobile: formData.mobile,
+      const payload: ProfileUpdatePayload = {
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        mobile: formData.mobile.trim(),
         avatar: formData.avatar,
       };
 
-      // Only add password fields if user is trying to change it
       if (passwords.newPassword) {
         payload.currentPassword = passwords.currentPassword;
         payload.newPassword = passwords.newPassword;
@@ -112,10 +124,11 @@ export default function ProfileForm({ user, stats }: ProfileFormProps) {
       }
 
       setMessage({ type: 'success', text: "Profile updated successfully" });
-      
-      // Clear password fields on success
       setPasswords({ currentPassword: "", newPassword: "", confirmPassword: "" });
-      router.refresh();
+      
+      setTimeout(() => {
+        router.refresh();
+      }, 500);
 
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "An error occurred";
@@ -126,159 +139,228 @@ export default function ProfileForm({ user, stats }: ProfileFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 pb-20">
-      
-      {/* Header & Actions */}
-      <div className="flex items-center justify-between sticky top-0 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-sm z-10 py-4 border-b border-zinc-200 dark:border-zinc-800 -mx-6 px-6">
-        <div>
-          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">My Profile</h1>
-          <p className="text-xs text-zinc-500">Manage your account settings and preferences.</p>
-        </div>
-        <Button type="submit" disabled={loading}>
-          {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-          Save Changes
-        </Button>
-      </div>
-
-      {/* Messages */}
-      {message && (
-        <div className={`p-4 rounded-lg text-sm font-medium border ${
-          message.type === 'success' 
-            ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800" 
-            : "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
-        }`}>
-          {message.text}
-        </div>
-      )}
-
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 flex items-center gap-4">
-          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400">
-            <Ticket className="w-6 h-6" />
+    <div className="w-full">
+      {/* Sticky Header - Full Width, No Top Margin */}
+      <div className="sticky top-0 bg-white dark:bg-zinc-950 z-20 border-b border-zinc-200 dark:border-zinc-800">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-zinc-50">My Profile</h1>
+            <p className="text-sm text-zinc-500 mt-1">Manage your account settings and preferences.</p>
           </div>
-          <div>
-            <p className="text-sm text-zinc-500">Total Tickets</p>
-            <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{stats.totalTickets}</p>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 flex items-center gap-4">
-          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-amber-600 dark:text-amber-400">
-            <Trophy className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-sm text-zinc-500">Wins</p>
-            <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{stats.winningTickets}</p>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 flex items-center gap-4">
-          <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-purple-600 dark:text-purple-400">
-            <Bell className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-sm text-zinc-500">Notifications</p>
-            <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{stats.unreadNotifications}</p>
-          </div>
+          <Button 
+            onClick={handleSubmit}
+            disabled={loading}
+            className="w-full sm:w-auto"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Save Changes
+              </>
+            )}
+          </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Avatar & Personal Info */}
-        <div className="lg:col-span-2 space-y-6">
-          <Card title="Personal Information">
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row gap-6">
-                <div className="w-full sm:w-1/3">
-                  <ImageUploader 
-                    label="Profile Avatar"
-                    folder="avatars"
-                    value={formData.avatar}
-                    onChange={(url) => handleChange("avatar", url)}
-                  />
-                </div>
-                <div className="w-full sm:w-2/3 space-y-4">
-                  <div className="relative">
-                    <User className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
-                    <Input 
-                      className="pl-9"
-                      label="Full Name"
-                      value={formData.name}
-                      onChange={(e) => handleChange("name", e.target.value)}
-                    />
-                  </div>
+      {/* Content Area */}
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6 pb-20">
+        
+        {/* Messages */}
+        {message && (
+          <div 
+            className={`w-full p-4 rounded-lg text-sm font-medium border animate-in fade-in slide-in-from-top-2 duration-300 ${
+              message.type === 'success' 
+                ? "bg-green-50 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800" 
+                : "bg-red-50 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800"
+            }`}
+            role="alert"
+          >
+            {message.text}
+          </div>
+        )}
+
+       
+        {/* Main Content Grid */}
+        <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Personal Information - 2/3 width on large screens */}
+          <div className="lg:col-span-2">
+            <Card title="Personal Information">
+              <div className="space-y-6">
+                <div className="flex flex-col md:flex-row gap-6">
                   
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
-                    <Input 
-                      className="pl-9"
-                      label="Email Address"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => handleChange("email", e.target.value)}
+                  {/* Avatar Section */}
+                  <div className="w-full md:w-1/3">
+                    <ImageUploader 
+                      label="Profile Avatar"
+                      folder="avatars"
+                      value={formData.avatar}
+                      onChange={(url) => handleChange("avatar", url)}
                     />
+                    <p className="text-xs text-zinc-500 mt-2 text-center">
+                      JPG, PNG or GIF. Max 2MB.
+                    </p>
                   </div>
 
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
-                    <Input 
-                      className="pl-9"
-                      label="Mobile Number"
-                      value={formData.mobile}
-                      onChange={(e) => handleChange("mobile", e.target.value)}
-                    />
+                  {/* Form Fields */}
+                  <div className="w-full md:w-2/3 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+                        Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                        <Input 
+                          className="pl-10 w-full"
+                          placeholder="Enter your full name"
+                          value={formData.name}
+                          onChange={(e) => handleChange("name", e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+                        Email Address <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                        <Input 
+                          className="pl-10 w-full"
+                          type="email"
+                          placeholder="your.email@example.com"
+                          value={formData.email}
+                          onChange={(e) => handleChange("email", e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+                        Mobile Number
+                      </label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                        <Input 
+                          className="pl-10 w-full"
+                          type="tel"
+                          placeholder="+1 (555) 000-0000"
+                          value={formData.mobile}
+                          onChange={(e) => handleChange("mobile", e.target.value)}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </div>
+
+          {/* Security Section - 1/3 width on large screens */}
+          <div className="lg:col-span-1">
+            <Card title="Security">
+              <div className="space-y-4">
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+                    💡 Leave password fields blank if you don't want to change your password.
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+                    Current Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                    <Input 
+                      className="pl-10 w-full"
+                      type="password"
+                      placeholder="Enter current password"
+                      value={passwords.currentPassword}
+                      onChange={(e) => handlePasswordChange("currentPassword", e.target.value)}
+                      autoComplete="current-password"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                      <Input 
+                        className="pl-10 w-full"
+                        type="password"
+                        placeholder="Enter new password"
+                        value={passwords.newPassword}
+                        onChange={(e) => handlePasswordChange("newPassword", e.target.value)}
+                        autoComplete="new-password"
+                      />
+                    </div>
+                    {passwords.newPassword && passwords.newPassword.length < 8 && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                        Password must be at least 8 characters
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+                      Confirm New Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                      <Input 
+                        className="pl-10 w-full"
+                        type="password"
+                        placeholder="Confirm new password"
+                        value={passwords.confirmPassword}
+                        onChange={(e) => handlePasswordChange("confirmPassword", e.target.value)}
+                        autoComplete="new-password"
+                      />
+                    </div>
+                    {passwords.confirmPassword && passwords.newPassword !== passwords.confirmPassword && (
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                        Passwords do not match
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
         </div>
 
-        {/* Right Column: Security */}
-        <div className="space-y-6">
-          <Card title="Security">
-            <div className="space-y-4">
-              <div className="p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg text-xs text-zinc-500 border border-zinc-100 dark:border-zinc-800">
-                Leave these fields blank if you do not want to change your password.
-              </div>
-              
-              <div className="relative">
-                <Lock className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
-                <Input 
-                  className="pl-9"
-                  label="Current Password"
-                  type="password"
-                  value={passwords.currentPassword}
-                  onChange={(e) => handlePasswordChange("currentPassword", e.target.value)}
-                />
-              </div>
-
-              <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 space-y-4">
-                <div className="relative">
-                  <Lock className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
-                  <Input 
-                    className="pl-9"
-                    label="New Password"
-                    type="password"
-                    value={passwords.newPassword}
-                    onChange={(e) => handlePasswordChange("newPassword", e.target.value)}
-                  />
-                </div>
-
-                <div className="relative">
-                  <Lock className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
-                  <Input 
-                    className="pl-9"
-                    label="Confirm New Password"
-                    type="password"
-                    value={passwords.confirmPassword}
-                    onChange={(e) => handlePasswordChange("confirmPassword", e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-          </Card>
+        {/* Mobile Save Button */}
+        <div className="lg:hidden w-full pt-4">
+          <Button 
+            onClick={handleSubmit}
+            disabled={loading}
+            className="w-full py-3"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving Changes...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Save Changes
+              </>
+            )}
+          </Button>
         </div>
       </div>
-    </form>
+    </div>
   );
 }

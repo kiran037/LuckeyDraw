@@ -8,6 +8,7 @@ import {
   Clock, Trophy, CheckCircle, Loader2, AlertCircle, Ticket, 
   ChevronLeft, Share2, Info, Users, Crown 
 } from 'lucide-react';
+import { getImageUrl } from '@/lib/image-helper';
 
 // --- Types ---
 interface DrawDetails {
@@ -129,7 +130,7 @@ export default function DrawDetailsPage() {
       {/* Hero Header */}
       <div className="relative h-64 sm:h-96 w-full bg-gray-900 overflow-hidden">
         {draw.bannerImage ? (
-          <img src={draw.bannerImage} alt={draw.title} className="w-full h-full object-cover opacity-90" />
+          <img src={getImageUrl(draw.bannerImage)} alt={draw.title} className="w-full h-full object-cover opacity-90" />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900 to-indigo-900">
             <Trophy size={64} className="text-white/20" />
@@ -229,7 +230,7 @@ export default function DrawDetailsPage() {
                       <div key={product.id} className="flex gap-4 bg-gray-50 dark:bg-[#0B0E14] p-4 rounded-2xl border border-gray-100 dark:border-white/5 items-center">
                           <div className="w-20 h-20 bg-white dark:bg-gray-800 rounded-xl overflow-hidden flex-shrink-0 border border-gray-200 dark:border-white/5">
                             {product.image ? (
-                                <img src={product.image} className="w-full h-full object-cover" alt={product.name} />
+                                <img src={getImageUrl(product.image)} className="w-full h-full object-cover" alt={product.name} />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-3xl">🎁</div>
                             )}

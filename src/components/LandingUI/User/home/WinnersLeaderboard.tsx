@@ -3,6 +3,7 @@
 
 import { Trophy, Crown, Medal, Sparkles } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import { getImageUrl } from '@/lib/image-helper';
 
 interface Winner {
   id: string;
@@ -102,7 +103,7 @@ export default function WinnersLeaderboard({ winners = [] }: { winners?: Winner[
                     {/* The Avatar */}
                     <div className={`${avatarSize} rounded-full border-4 border-[#0B0E14] bg-[#1A1F2E] overflow-hidden relative`}>
                         {winner.userAvatar ? (
-                            <img src={winner.userAvatar} alt="" className="w-full h-full object-cover" />
+                            <img src={getImageUrl(winner.userAvatar)} alt="" className="w-full h-full object-cover" />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center font-bold text-white bg-white/10 text-xl">
                                 {winner.userName.charAt(0)}
@@ -147,7 +148,7 @@ export default function WinnersLeaderboard({ winners = [] }: { winners?: Winner[
                 {/* Avatar */}
                 <div className="w-10 h-10 rounded-full bg-[#1A1F2E] border border-white/10 overflow-hidden flex-shrink-0">
                     {winner.userAvatar ? (
-                        <img src={winner.userAvatar} alt="" className="w-full h-full object-cover" />
+                        <img src={getImageUrl(winner.userAvatar)} alt="" className="w-full h-full object-cover" />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-400">
                             {winner.userName.charAt(0)}

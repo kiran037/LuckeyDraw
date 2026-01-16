@@ -1,5 +1,3 @@
-
-
 // src/components/user/home/MyTicketsSection.tsx
 'use client';
 
@@ -7,6 +5,7 @@ import Link from 'next/link';
 import { Ticket as TicketIcon, Calendar, Trophy, ArrowRight, QrCode } from 'lucide-react';
 import { Ticket } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
+import { getImageUrl } from '@/lib/image-helper';
 
 // We need to extend the type locally to match the new API response
 // until you update your global types file.
@@ -29,13 +28,13 @@ export default function MyTicketsSection({ tickets }: { tickets: ExtendedTicket[
     <div className="w-full">
       {/* Header */}
       <div className="flex justify-between items-end mb-5 px-2">
-        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
            <span className="w-1.5 h-5 bg-purple-500 rounded-full shadow-[0_0_10px_#a855f7]" />
            My Tickets
         </h2>
         <Link 
           href="/user/tickets" 
-          className="text-xs font-bold text-purple-400 hover:text-white flex items-center gap-1 transition-colors"
+          className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-white flex items-center gap-1 transition-colors"
         >
           View All <ArrowRight size={12} />
         </Link>
@@ -56,21 +55,21 @@ export default function MyTicketsSection({ tickets }: { tickets: ExtendedTicket[
                <div className={`
                  relative w-full h-32 sm:h-36 flex rounded-2xl overflow-hidden transition-transform duration-300 hover:-translate-y-1
                  ${isWinner 
-                    ? 'shadow-[0_0_20px_rgba(234,179,8,0.3)]' 
-                    : 'shadow-[0_4px_15px_rgba(0,0,0,0.5)] group-hover:shadow-[0_8px_25px_rgba(168,85,247,0.25)]'}
+                    ? 'shadow-[0_0_20px_rgba(234,179,8,0.3)] dark:shadow-[0_0_20px_rgba(234,179,8,0.3)]' 
+                    : 'shadow-[0_4px_15px_rgba(0,0,0,0.1)] dark:shadow-[0_4px_15px_rgba(0,0,0,0.5)] group-hover:shadow-[0_8px_25px_rgba(168,85,247,0.15)] dark:group-hover:shadow-[0_8px_25px_rgba(168,85,247,0.25)]'}
                `}>
                  
                  {/* ================= LEFT SIDE (MAIN) ================= */}
-                 <div className="relative flex-[0.7] sm:flex-[0.75] bg-[#1A1F2E] border-y border-l border-white/5 rounded-l-2xl overflow-hidden">
+                 <div className="relative flex-[0.7] sm:flex-[0.75] bg-white dark:bg-[#1A1F2E] border-y border-l border-gray-200 dark:border-white/5 rounded-l-2xl overflow-hidden">
                     
                     {/* Background Image with Overlay */}
                     <div className="absolute inset-0 z-0">
                         {bgImage ? (
-                            <img src={bgImage} alt="" className="w-full h-full object-cover opacity-40 mix-blend-overlay" />
+                            <img src={getImageUrl(bgImage)} alt="" className="w-full h-full object-cover opacity-20 dark:opacity-40 mix-blend-overlay" />
                         ) : (
-                            <div className="w-full h-full bg-gradient-to-br from-purple-900/20 to-blue-900/20" />
+                            <div className="w-full h-full bg-gradient-to-br from-purple-100/50 to-blue-100/50 dark:from-purple-900/20 dark:to-blue-900/20" />
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-r from-[#1A1F2E] via-[#1A1F2E]/80 to-transparent" />
+                        <div className="absolute inset-0 bg-gradient-to-r from-white dark:from-[#1A1F2E] via-white/90 dark:via-[#1A1F2E]/80 to-transparent" />
                     </div>
 
                     {/* Content */}
@@ -79,26 +78,28 @@ export default function MyTicketsSection({ tickets }: { tickets: ExtendedTicket[
                             {/* Status Badge */}
                             <div className={`
                                 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider mb-2
-                                ${isWinner ? 'bg-yellow-500 text-black' : 'bg-white/10 text-purple-300 border border-purple-500/30'}
+                                ${isWinner 
+                                  ? 'bg-yellow-500 text-black' 
+                                  : 'bg-purple-100 dark:bg-white/10 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-500/30'}
                             `}>
                                 {isWinner ? <><Trophy size={10} /> WINNER</> : ticket.status}
                             </div>
                             
                             {/* Title */}
-                            <h3 className="text-sm sm:text-lg font-bold text-white line-clamp-2 leading-tight">
+                            <h3 className="text-sm sm:text-lg font-bold text-gray-900 dark:text-white line-clamp-2 leading-tight">
                                 {ticket.draw?.title || 'Unknown Draw'}
                             </h3>
                         </div>
 
                         {/* Footer Info */}
-                        <div className="flex items-center gap-3 text-[10px] text-gray-400">
+                        <div className="flex items-center gap-3 text-[10px] text-gray-600 dark:text-gray-400">
                              <div className="flex items-center gap-1">
-                                <TicketIcon size={12} className="text-purple-400" />
-                                <span className="font-mono text-gray-300">x1</span>
+                                <TicketIcon size={12} className="text-purple-600 dark:text-purple-400" />
+                                <span className="font-mono text-gray-700 dark:text-gray-300">x1</span>
                              </div>
-                             <div className="h-3 w-[1px] bg-white/10" />
+                             <div className="h-3 w-[1px] bg-gray-300 dark:bg-white/10" />
                              <div className="flex items-center gap-1">
-                                <Calendar size={12} className="text-purple-400" />
+                                <Calendar size={12} className="text-purple-600 dark:text-purple-400" />
                                 <span>{formatDate(ticket.draw?.endTime || '')}</span>
                              </div>
                         </div>
@@ -106,37 +107,37 @@ export default function MyTicketsSection({ tickets }: { tickets: ExtendedTicket[
 
                     {/* DECORATION: "Admit One" Watermark */}
                     <div className="absolute -bottom-4 -right-2 transform -rotate-12 opacity-5 select-none pointer-events-none">
-                        <span className="text-6xl font-black text-white">ADMIT ONE</span>
+                        <span className="text-6xl font-black text-gray-900 dark:text-white">ADMIT ONE</span>
                     </div>
                  </div>
 
                  {/* ================= SEPARATOR (DASHED LINE) ================= */}
-                 <div className="relative w-[1px] bg-[#1A1F2E] flex flex-col justify-between py-2">
+                 <div className="relative w-[1px] bg-white dark:bg-[#1A1F2E] flex flex-col justify-between py-2">
                     {/* The Dashed Line */}
-                    <div className="absolute inset-y-2 left-0 w-[2px] border-l-2 border-dashed border-gray-600/30 z-20" />
+                    <div className="absolute inset-y-2 left-0 w-[2px] border-l-2 border-dashed border-gray-300 dark:border-gray-600/30 z-20" />
                     
                     {/* Top Notch (Cutout) */}
-                    <div className="absolute -top-3 -left-3 w-6 h-6 rounded-full bg-[#0B0E14] z-30 box-content border-b border-white/5" />
+                    <div className="absolute -top-3 -left-3 w-6 h-6 rounded-full bg-gray-50 dark:bg-[#0B0E14] z-30 box-content border-b border-gray-200 dark:border-white/5" />
                     
                     {/* Bottom Notch (Cutout) */}
-                    <div className="absolute -bottom-3 -left-3 w-6 h-6 rounded-full bg-[#0B0E14] z-30 box-content border-t border-white/5" />
+                    <div className="absolute -bottom-3 -left-3 w-6 h-6 rounded-full bg-gray-50 dark:bg-[#0B0E14] z-30 box-content border-t border-gray-200 dark:border-white/5" />
                  </div>
 
                  {/* ================= RIGHT SIDE (STUB) ================= */}
                  <div className={`
-                    relative flex-[0.3] sm:flex-[0.25] bg-[#151925] border-y border-r border-white/5 rounded-r-2xl flex flex-col items-center justify-center p-2
-                    ${isWinner ? 'bg-gradient-to-b from-yellow-900/10 to-transparent' : ''}
+                    relative flex-[0.3] sm:flex-[0.25] bg-gray-100 dark:bg-[#151925] border-y border-r border-gray-200 dark:border-white/5 rounded-r-2xl flex flex-col items-center justify-center p-2
+                    ${isWinner ? 'bg-gradient-to-b from-yellow-100/50 to-transparent dark:from-yellow-900/10 dark:to-transparent' : ''}
                  `}>
                     <div className="text-center space-y-1">
-                        <span className="text-[9px] text-gray-500 uppercase font-bold tracking-widest">Ticket No</span>
-                        <p className="text-xs sm:text-sm font-mono font-bold text-white tracking-wider">
+                        <span className="text-[9px] text-gray-500 dark:text-gray-500 uppercase font-bold tracking-widest">Ticket No</span>
+                        <p className="text-xs sm:text-sm font-mono font-bold text-gray-900 dark:text-white tracking-wider">
                             {ticket.ticketCode.slice(-6)}
                         </p>
                     </div>
 
                     {/* Barcode / QR Simulation */}
                     <div className="mt-2 sm:mt-3 opacity-50 group-hover:opacity-100 transition-opacity">
-                        <QrCode size={32} className="text-white mx-auto" />
+                        <QrCode size={32} className="text-gray-900 dark:text-white mx-auto" />
                     </div>
                     
                     {/* Hover Shine on Stub */}
