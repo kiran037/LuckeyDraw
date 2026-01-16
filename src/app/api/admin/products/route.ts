@@ -1,3 +1,4 @@
+///Users/xeoren/Desktop/lucky_draw/src/app/api/admin/products/route.ts
 import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";

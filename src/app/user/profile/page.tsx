@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api-client';
-import ImageUpload from '@/components/ui/Upload'; // Keep your existing upload component
+import ImageUpload from '@/components/LandingUI/Upload'; // Keep your existing upload component
 import { 
   LogOut, Edit2, X, MapPin, Shield, User, Smartphone, 
   Mail, Lock, ChevronRight, Bell, Ticket, Loader2
@@ -11,7 +11,7 @@ import {
 import { 
   BentoCard, ProfileInput, ActionButton, IconButton 
 } from '@/components/LandingUI/ProfilePrimitives';
-import StatsGrid from '@/components/User/Profile/StatsGrid';
+import StatsGrid from '@/components/LandingUI/User/Profile/StatsGrid';
 
 interface UpdateProfilePayload {
   name: string;

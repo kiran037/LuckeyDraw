@@ -2,28 +2,20 @@ import { NextResponse } from "next/server";
 
 /**
  * Safely converts BigInt values to strings within any object or array.
- * This prevents the "Do not know how to serialize a BigInt" error.
  */
 export function serializeBigInt<T>(data: T): T {
   return JSON.parse(
-    JSON.stringify(data, (key, value) =>
+    JSON.stringify(data, (_, value) =>
       typeof value === "bigint" ? value.toString() : value
     )
   );
 }
 
 /**
- * A wrapper for NextResponse.json that automatically handles BigInt serialization.
- * Uses 'unknown' instead of 'any' to satisfy ESLint.
+ * Standard JSON response - returns data directly without wrapping
  */
 export function jsonResponse(data: unknown, status = 200) {
-  return NextResponse.json(
-    {
-      success: status >= 200 && status < 300,
-      data: serializeBigInt(data),
-    },
-    { status }
-  );
+  return NextResponse.json(serializeBigInt(data), { status });
 }
 
 /**

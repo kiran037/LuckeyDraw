@@ -1,7 +1,7 @@
 'use client';
 
-import Header from '@/components/Header/Header';
-import BottomNav from '@/components/User/BottomNav';
+import Header from '@/components/LandingUI/Header/Header';
+import BottomNav from '@/components/LandingUI/BottomNav';
 
 export default function UserLayout({
   children,

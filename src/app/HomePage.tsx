@@ -6,17 +6,17 @@ import { Draw, Ticket } from '@/lib/types';
 
 // New UI Components
 import { PageLoader, PageError } from '@/components/LandingUI/HomePrimitives';
-import Header from '@/components/Header/Header';
-import BottomNav from '@/components/User/BottomNav';
+import Header from '@/components/LandingUI/Header/Header';
+import BottomNav from '@/components/LandingUI/BottomNav';
 
 // Feature Components
-import HeroCarousel from '@/components/User/home/HeroCarousel';
-import QuickStats from '@/components/User/home/QuickStats';
-import LiveDrawsSection from '@/components/User/home/LiveDrawsSection';
-import MyTicketsSection from '@/components/User/home/MyTicketsSection';
-import WinnersLeaderboard from '@/components/User/home/WinnersLeaderboard';
-import HowItWorks from '@/components/User/home/HowItWorks';
-import FAQSection from '@/components/User/home/FAQSection';
+import HeroCarousel from '@/components/LandingUI/User/home/HeroCarousel';
+import QuickStats from '@/components/LandingUI/User/home/QuickStats';
+import LiveDrawsSection from '@/components/LandingUI/User/home/LiveDrawsSection';
+import MyTicketsSection from '@/components/LandingUI/User/home/MyTicketsSection';
+import WinnersLeaderboard from '@/components/LandingUI/User/home/WinnersLeaderboard';
+import HowItWorks from '@/components/LandingUI/User/home/HowItWorks';
+import FAQSection from '@/components/LandingUI/User/home/FAQSection';
 
 interface HomeData {
   stats: {

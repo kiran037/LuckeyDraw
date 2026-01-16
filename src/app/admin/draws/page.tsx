@@ -1,103 +1,51 @@
-"use client";
+export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { PageHeader, Card, Badge, Button } from "@/components/ui";
-import { Plus, Edit } from "lucide-react";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/AdminUI/ui/Button";
+import DrawList from "@/components/AdminUI/Draws/DrawList";
+import { headers, cookies } from "next/headers";
 
-type DrawStatus = "DRAFT" | "LIVE" | "CLOSED" | "RESULT_DECLARED";
-
-interface Draw {
-  id: string;
-  title: string;
-  entryFee: number;
-  maxTickets: number;
-  ticketCount: number;
-  status: DrawStatus;
+async function getDraws() {
+  const headerList = await headers();
+  const cookieStore = await cookies();
+  const host = headerList.get("host");
+  const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+  
+  try {
+    const res = await fetch(`${protocol}://${host}/api/admin/draws?limit=10`, {
+      cache: "no-store",
+      headers: { Cookie: cookieStore.toString() }
+    });
+    
+    if (!res.ok) return { draws: [], meta: { total: 0, page: 1, limit: 10, totalPages: 0 } };
+    
+    const json = await res.json();
+    return json; 
+  } catch (e) {
+    return { draws: [], meta: { total: 0, page: 1, limit: 10, totalPages: 0 } };
+  }
 }
 
-export default function DrawsPage() {
-  const [draws, setDraws] = useState<Draw[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      const res = await fetch("/api/admin/draws", {
-        credentials: "include",
-      });
-      const json = await res.json();
-      if (json.success) setDraws(json.data);
-      setLoading(false);
-    })();
-  }, []);
-
-  const badgeVariant = (status: DrawStatus) => {
-    if (status === "LIVE") return "success";
-    if (status === "DRAFT") return "warning";
-    if (status === "CLOSED") return "danger";
-    return "default";
-  };
+export default async function DrawsPage() {
+  const data = await getDraws();
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Lucky Draws"
-        description="Manage all lucky draws"
-        action={
-          <Button asChild>
-            <Link href="/admin/draws/new" className="flex gap-2">
-              <Plus size={18} />
-              Add Draw
-            </Link>
+    <div className="p-6 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-white">Draws</h1>
+          <p className="text-sm text-zinc-500">Manage your raffles and ticket sales.</p>
+        </div>
+        <Link href="/admin/draws/create">
+          <Button size="sm" className="w-full sm:w-auto">
+            <Plus className="w-4 h-4 mr-2" />
+            Create Draw
           </Button>
-        }
-      />
+        </Link>
+      </div>
 
-      <Card>
-        <table className="w-full">
-          <thead>
-            <tr className="border-b text-xs uppercase text-gray-600">
-              <th className="px-4 py-3 text-left">Title</th>
-              <th className="px-4 py-3 text-right">Entry</th>
-              <th className="px-4 py-3 text-right">Max</th>
-              <th className="px-4 py-3 text-right">Sold</th>
-              <th className="px-4 py-3 text-center">Status</th>
-              <th className="px-4 py-3 text-center">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={6} className="py-6 text-center">
-                  Loading…
-                </td>
-              </tr>
-            )}
-
-            {!loading &&
-              draws.map((d) => (
-                <tr key={d.id} className="border-b hover:bg-gray-50">
-                  <td className="px-4 py-4 font-semibold">{d.title}</td>
-                  <td className="px-4 py-4 text-right">₹{d.entryFee}</td>
-                  <td className="px-4 py-4 text-right">{d.maxTickets}</td>
-                  <td className="px-4 py-4 text-right">{d.ticketCount}</td>
-                  <td className="px-4 py-4 text-center">
-                    <Badge variant={badgeVariant(d.status)}>
-                      {d.status}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-4 text-center">
-                    <Button asChild size="sm" variant="ghost">
-                      <Link href={`/admin/draws/${d.id}`}>
-                        <Edit size={16} /> Edit
-                      </Link>
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-      </Card>
+      <DrawList draws={data.draws} meta={data.meta} />
     </div>
   );
 }

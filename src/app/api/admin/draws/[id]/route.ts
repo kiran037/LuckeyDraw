@@ -4,18 +4,6 @@ import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
 import { draw_status, Prisma } from "@/generated/client/client";
 
-// Interface for incoming product updates
-interface ProductUpdateInput {
-  id?: string;
-  name: string;
-  image?: string | null;
-  quantity?: number | string;
-  description?: string | null;
-}
-
-/* =========================
-   GET — Single Draw Details + Stats
-========================= */
 export async function GET(
   _req: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -25,8 +13,6 @@ export async function GET(
     if (!admin) return errorResponse("Unauthorized", 401);
 
     const { id } = await context.params;
-    if (!id) return errorResponse("Invalid ID", 400);
-
     const drawId = BigInt(id);
 
     const draw = await prisma.draw.findUnique({
@@ -39,9 +25,8 @@ export async function GET(
 
     if (!draw) return errorResponse("Draw not found", 404);
 
-    // Calculate Revenue
     const revenueAgg = await prisma.ticket.aggregate({
-      where: { 
+      where: {
         drawId: drawId,
         status: { in: ['ACTIVE'] }
       },
@@ -52,8 +37,29 @@ export async function GET(
     const totalRevenue = revenueAgg._sum.pricePaid || 0;
     const percentage = draw.maxTickets > 0 ? (sold / draw.maxTickets) * 100 : 0;
 
+    const serializedDraw = {
+      id: draw.id.toString(),
+      title: draw.title,
+      description: draw.description,
+      bannerImage: draw.bannerImage,
+      rules: draw.rules,
+      entryFee: draw.entryFee,
+      maxTickets: draw.maxTickets,
+      startTime: draw.startTime.toISOString(),
+      endTime: draw.endTime.toISOString(),
+      status: draw.status,
+      createdAt: draw.createdAt.toISOString(),
+      drawproduct: draw.drawproduct.map(p => ({
+        id: p.id.toString(),
+        name: p.name,
+        image: p.image,
+        quantity: p.quantity,
+        description: p.description
+      }))
+    };
+
     return jsonResponse({
-      draw,
+      draw: serializedDraw,
       stats: {
         sold,
         remaining: draw.maxTickets - sold,
@@ -68,9 +74,6 @@ export async function GET(
   }
 }
 
-/* =========================
-   PUT — Update Draw & Products
-========================= */
 export async function PUT(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -83,36 +86,30 @@ export async function PUT(
     const drawId = BigInt(id);
     const body = await req.json();
 
-    // 1. Fetch current state
-    const existing = await prisma.draw.findUnique({
+    const existingDraw = await prisma.draw.findUnique({
       where: { id: drawId },
-      select: { 
+      select: {
         _count: { select: { ticket: true } },
-        status: true,
-        entryFee: true
+        entryFee: true,
+        drawproduct: { select: { id: true } }
       }
     });
 
-    if (!existing) return errorResponse("Draw not found", 404);
+    if (!existingDraw) return errorResponse("Draw not found", 404);
+    const soldCount = existingDraw._count.ticket;
 
-    const soldCount = existing._count.ticket;
-
-    // 2. Logic Validation
     if (body.maxTickets && body.maxTickets < soldCount) {
       return errorResponse(`Cannot reduce max tickets below sold count (${soldCount})`, 400);
     }
-
-    if (soldCount > 0 && body.entryFee !== undefined && body.entryFee !== existing.entryFee) {
+    if (soldCount > 0 && body.entryFee !== undefined && body.entryFee !== existingDraw.entryFee) {
       return errorResponse("Cannot change Entry Fee after tickets have been sold", 400);
     }
-
     if (body.startTime && body.endTime) {
       if (new Date(body.startTime) >= new Date(body.endTime)) {
         return errorResponse("End time must be after start time", 400);
       }
     }
 
-    // 3. Prepare Update Object
     const updateData: Prisma.drawUpdateInput = {};
     if (body.title) updateData.title = body.title.trim();
     if (body.description !== undefined) updateData.description = body.description;
@@ -122,51 +119,50 @@ export async function PUT(
     if (body.startTime) updateData.startTime = new Date(body.startTime);
     if (body.endTime) updateData.endTime = new Date(body.endTime);
     if (body.maxTickets) updateData.maxTickets = Number(body.maxTickets);
-    
-    if (soldCount === 0 && body.entryFee !== undefined) {
-      updateData.entryFee = Number(body.entryFee);
-    }
+    if (soldCount === 0 && body.entryFee !== undefined) updateData.entryFee = Number(body.entryFee);
 
-    // 4. Handle Products (Create New or Update Existing)
-    if (Array.isArray(body.products)) {
-      const updates: Promise<unknown>[] = [];
-      const creates: Prisma.drawproductCreateWithoutDrawInput[] = [];
-
-      body.products.forEach((p: ProductUpdateInput) => {
-        if (p.id) {
-          // Update existing product
-          updates.push(prisma.drawproduct.update({
-            where: { id: BigInt(p.id) },
-            data: {
-              name: p.name,
-              image: p.image,
-              quantity: Number(p.quantity),
-              description: p.description
-            }
-          }));
-        } else {
-          // Create new product for this draw
-          creates.push({
-            name: p.name,
-            image: p.image,
-            quantity: Number(p.quantity || 1),
-            description: p.description
-          });
-        }
+    await prisma.$transaction(async (tx) => {
+      await tx.draw.update({
+        where: { id: drawId },
+        data: updateData,
       });
 
-      if (creates.length > 0) {
-        updateData.drawproduct = { create: creates };
+      if (Array.isArray(body.productIds)) {
+        const incomingIds = body.productIds.map((pid: string | number) => BigInt(pid));
+        const currentIds = existingDraw.drawproduct.map(p => p.id);
+
+        const toAdd = incomingIds.filter((id: bigint) => !currentIds.includes(id));
+        const toRemove = currentIds.filter(id => !incomingIds.includes(id));
+
+        if (toAdd.length > 0) {
+          await tx.drawproduct.updateMany({
+            where: { id: { in: toAdd } },
+            data: { drawId: drawId }
+          });
+        }
+
+        if (toRemove.length > 0) {
+          const safeToDelete = await tx.drawproduct.findMany({
+            where: { 
+              id: { in: toRemove },
+              winner: { none: {} }
+            },
+            select: { id: true }
+          });
+          
+          const safeIds = safeToDelete.map(p => p.id);
+
+          if (safeIds.length > 0) {
+            await tx.drawproduct.deleteMany({
+              where: { id: { in: safeIds } }
+            });
+          }
+        }
       }
+    });
 
-      // Execute product updates (parallel)
-      await Promise.all(updates);
-    }
-
-    // 5. Execute Main Draw Update
-    const updatedDraw = await prisma.draw.update({
+    const updatedDraw = await prisma.draw.findUnique({
       where: { id: drawId },
-      data: updateData,
       include: { drawproduct: true }
     });
 
@@ -182,9 +178,6 @@ export async function PUT(
   }
 }
 
-/* =========================
-   DELETE — Delete Draw
-========================= */
 export async function DELETE(
   _req: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -198,7 +191,7 @@ export async function DELETE(
 
     const draw = await prisma.draw.findUnique({
       where: { id: drawId },
-      include: { 
+      include: {
         _count: { select: { ticket: true } }
       }
     });

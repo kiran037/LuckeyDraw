@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api-client';
-import ImageUpload from '@/components/ui/Upload'; // Ensure this component exists & handles themes
+import ImageUpload from '@/components/LandingUI/Upload'; // Ensure this component exists & handles themes
 import { ArrowLeft, CheckCircle, AlertCircle, Loader2, CreditCard, UploadCloud } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 

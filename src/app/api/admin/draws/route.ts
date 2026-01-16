@@ -4,18 +4,6 @@ import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
 import { draw_status, Prisma } from "@/generated/client/client";
 
-// Interface for incoming product data
-interface ProductInput {
-  name: string;
-  image?: string | null;
-  quantity?: number | string;
-  description?: string | null;
-}
-
-/* =========================
-   GET — List draws (Advanced)
-   Query Params: page, limit, search, status
-========================= */
 export async function GET(req: NextRequest) {
   try {
     const admin = await requireAdmin();
@@ -27,18 +15,16 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
     const status = searchParams.get("status") as draw_status | undefined;
 
-    // Build Query
     const where: Prisma.drawWhereInput = {};
 
     if (search) {
-      where.title = { contains: search }; 
+      where.title = { contains: search };
     }
 
     if (status && Object.values(draw_status).includes(status)) {
       where.status = status;
     }
 
-    // Transaction for Count + Data
     const [total, draws] = await prisma.$transaction([
       prisma.draw.count({ where }),
       prisma.draw.findMany({
@@ -52,14 +38,22 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    // Calculate generic stats for the list view
     const formattedDraws = draws.map((d) => {
       const sold = d._count.ticket;
       const totalTickets = d.maxTickets;
       const percentage = totalTickets > 0 ? Math.round((sold / totalTickets) * 100) : 0;
 
       return {
-        ...d,
+        id: d.id.toString(),
+        title: d.title,
+        description: d.description,
+        bannerImage: d.bannerImage,
+        entryFee: d.entryFee,
+        maxTickets: d.maxTickets,
+        startTime: d.startTime.toISOString(),
+        endTime: d.endTime.toISOString(),
+        status: d.status,
+        createdAt: d.createdAt.toISOString(),
         stats: {
           sold,
           percentage,
@@ -69,13 +63,13 @@ export async function GET(req: NextRequest) {
     });
 
     return jsonResponse({
+      draws: formattedDraws,
       meta: {
         total,
         page,
         limit,
         totalPages: Math.ceil(total / limit),
       },
-      draws: formattedDraws,
     });
 
   } catch (err) {
@@ -84,9 +78,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/* =========================
-   POST — Create Draw (with Products)
-========================= */
 export async function POST(req: NextRequest) {
   try {
     const admin = await requireAdmin();
@@ -94,10 +85,9 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    // 1. Basic Validation
     if (!body.title?.trim()) return errorResponse("Title is required", 400);
     if (!body.startTime || !body.endTime) return errorResponse("Dates are required", 400);
-    
+
     const startTime = new Date(body.startTime);
     const endTime = new Date(body.endTime);
     if (startTime >= endTime) return errorResponse("End time must be after start time", 400);
@@ -105,41 +95,38 @@ export async function POST(req: NextRequest) {
     const entryFee = Math.max(0, Number(body.entryFee || 0));
     const maxTickets = Math.max(1, Number(body.maxTickets || 100));
 
-    // 2. Prepare Product Data (if any)
-    const productsCreate: Prisma.drawproductCreateWithoutDrawInput[] = Array.isArray(body.products) 
-      ? body.products.map((p: ProductInput) => ({
-          name: p.name,
-          image: p.image || null,
-          quantity: Number(p.quantity || 1),
-          description: p.description || null
-        }))
+    const productIdsToAssign: bigint[] = Array.isArray(body.productIds)
+      ? body.productIds.map((id: string | number) => BigInt(id))
       : [];
 
-    // 3. Create Transaction
-    const draw = await prisma.draw.create({
-      data: {
-        title: body.title.trim(),
-        description: body.description?.trim() || null,
-        bannerImage: body.bannerImage || null,
-        rules: body.rules?.trim() || null,
-        entryFee,
-        maxTickets,
-        startTime,
-        endTime,
-        status: (body.status as draw_status) || draw_status.DRAFT,
-        // Nested create for products
-        drawproduct: {
-          create: productsCreate
-        }
-      },
-      include: {
-        drawproduct: true
+    const result = await prisma.$transaction(async (tx) => {
+      const newDraw = await tx.draw.create({
+        data: {
+          title: body.title.trim(),
+          description: body.description?.trim() || null,
+          bannerImage: body.bannerImage || null,
+          rules: body.rules?.trim() || null,
+          entryFee,
+          maxTickets,
+          startTime,
+          endTime,
+          status: (body.status as draw_status) || draw_status.DRAFT,
+        },
+      });
+
+      if (productIdsToAssign.length > 0) {
+        await tx.drawproduct.updateMany({
+          where: { id: { in: productIdsToAssign } },
+          data: { drawId: newDraw.id },
+        });
       }
+
+      return newDraw;
     });
 
     return jsonResponse({
       message: "Draw created successfully",
-      draw,
+      draw: result,
     }, 201);
 
   } catch (err) {

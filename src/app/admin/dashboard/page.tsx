@@ -1,201 +1,124 @@
-// // src/app/admin/dashboard/page.tsx
-import StatCard from "@/components/AdminUI/StatCard";
-import { Gift, Users, Ticket, TrendingUp } from "lucide-react";
-import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
-import { Card, Badge } from "@/components/ui";
+"use client";
 
-export default async function DashboardPage() {
-  const currentUser = await getCurrentUser();
+import { useEffect, useState } from "react";
+import { StatsGrid } from "@/components/AdminUI/Dashboard/StatsGrid";
+import { RevenueChart } from "@/components/AdminUI/Dashboard/RevenueChart";
+import { RecentActivity } from "@/components/AdminUI/Dashboard/RecentActivity";
+import { Loader2 } from "lucide-react";
+
+// ... (Keep your existing interfaces StatsData, AnalyticsData, ActivityData here) ...
+interface StatsData {
+  revenue: { total: number; today: number };
+  users: { total: number; newToday: number };
+  tickets: { total: number; soldToday: number };
+  draws: { active: number };
+  actionItems: { pendingPayments: number };
+}
+
+interface AnalyticsData {
+  date: string;
+  amount: number;
+}
+
+interface ActivityData {
+  users: Array<{ id: string; name: string; email: string; avatar: string | null; createdAt: string }>;
+  transactions: Array<{ 
+    id: string; 
+    amount: number; 
+    status: string; 
+    createdAt: string; 
+    user: { name: string };
+    draw: { title: string };
+  }>;
+}
+
+export default function AdminDashboard() {
+  const [stats, setStats] = useState<StatsData | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsData[] | null>(null);
+  const [activity, setActivity] = useState<ActivityData | null>(null);
   
-  const [
-    totalDraws,
-    totalUsers,
-    totalTickets,
-    approvedPayments,
-    recentPayments,
-  ] = await Promise.all([
-    prisma.draw.count(),
-    prisma.user.count(),
-    prisma.ticket.count(),
-    prisma.payment.aggregate({
-      _sum: { amount: true },
-      where: { status: "APPROVED" },
-    }),
-    prisma.payment.findMany({
-      take: 5,
-      orderBy: { createdAt: "desc" },
-      include: {
-        user: { select: { name: true } },
-        draw: { select: { title: true } },
-      },
-    }),
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const totalRevenue = approvedPayments._sum.amount || 0;
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        const [statsRes, analyticsRes, activityRes] = await Promise.all([
+          fetch("/api/admin/dashboard/stats"),
+          fetch("/api/admin/dashboard/analytics"),
+          fetch("/api/admin/dashboard/activity")
+        ]);
 
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case "APPROVED":
-        return "success";
-      case "PENDING":
-        return "warning";
-      case "REJECTED":
-        return "danger";
-      default:
-        return "default";
-    }
-  };
+        if (!statsRes.ok || !analyticsRes.ok || !activityRes.ok) {
+          throw new Error("One or more dashboard services failed");
+        }
 
+        const statsData = await statsRes.json();
+        const analyticsData = await analyticsRes.json();
+        const activityData = await activityRes.json();
+
+        // Debugging: Check console to see if files are swapped
+        console.log("Stats API:", statsData);
+        console.log("Analytics API:", analyticsData);
+        console.log("Activity API:", activityData);
+
+        // FIXED: Safe navigation using ?.
+        setStats(statsData?.kpi || null);
+        setAnalytics(analyticsData?.charts?.revenueOverTime || []);
+        setActivity(activityData?.activity || null);
+
+      } catch (err) {
+        console.error("Dashboard Load Error:", err);
+        setError("Failed to load dashboard data.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  if (error) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center flex-col gap-4">
+        <p className="text-red-500 font-medium">{error}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-zinc-900 text-white rounded-lg text-sm"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // ... (Keep the rest of your return JSX exactly as it was) ...
   return (
-    <div className="space-y-8 max-w-7xl">
-      {/* Welcome Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Welcome back, {currentUser?.name}! 👋
-        </h1>
-        <p className="text-gray-600">
-          Here's what's happening with your draws today
-        </p>
-      </div>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          title="Total Users"
-          value={totalUsers}
-          change="+8.2%"
-          changeType="increase"
-          icon={Users}
-        />
-        <StatCard
-          title="Total Draws"
-          value={totalDraws}
-          change="+12.5%"
-          changeType="increase"
-          icon={Gift}
-        />
-        <StatCard
-          title="Tickets Sold"
-          value={totalTickets}
-          change="+23.1%"
-          changeType="increase"
-          icon={Ticket}
-        />
-        <StatCard
-          title="Total Revenue"
-          value={`₹${(totalRevenue / 1000).toFixed(1)}k`}
-          change="+36.8%"
-          changeType="increase"
-          icon={TrendingUp}
-        />
-      </div>
-
-      {/* Recent Activity */}
-      <Card>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-bold text-gray-900">Recent Payments</h2>
+    <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500">
+      
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
+            Overview
+          </h2>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+            Welcome back. Here's what's happening today.
+          </p>
         </div>
         
-        {recentPayments.length > 0 ? (
-          <div className="space-y-3">
-            {recentPayments.map((payment) => (
-              <div
-                key={payment.id.toString()}
-                className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-              >
-                <div className="flex-1">
-                  <p className="font-semibold text-gray-900 text-sm">
-                    {payment.user.name}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {payment.draw.title}
-                  </p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <p className="font-bold text-gray-900">₹{payment.amount}</p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(payment.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <Badge variant={getStatusVariant(payment.status)}>
-                    {payment.status}
-                  </Badge>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12 text-gray-500">
-            <p>No recent payments</p>
+        {loading && (
+          <div className="flex items-center text-sm text-zinc-400">
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            Updating...
           </div>
         )}
-      </Card>
+      </div>
 
-      {/* Admin Table */}
-      {currentUser?.role === "ADMIN" && recentPayments.length > 0 && (
-        <Card>
-          <h2 className="text-lg font-bold text-gray-900 mb-6">
-            Payment Details
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left py-3 px-4 text-xs font-bold text-gray-600 uppercase">
-                    User
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-bold text-gray-600 uppercase">
-                    Draw
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-bold text-gray-600 uppercase">
-                    Transaction
-                  </th>
-                  <th className="text-right py-3 px-4 text-xs font-bold text-gray-600 uppercase">
-                    Amount
-                  </th>
-                  <th className="text-center py-3 px-4 text-xs font-bold text-gray-600 uppercase">
-                    Status
-                  </th>
-                  <th className="text-right py-3 px-4 text-xs font-bold text-gray-600 uppercase">
-                    Date
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentPayments.map((payment) => (
-                  <tr
-                    key={payment.id.toString()}
-                    className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="py-4 px-4 text-sm font-semibold text-gray-900">
-                      {payment.user.name}
-                    </td>
-                    <td className="py-4 px-4 text-sm text-gray-600">
-                      {payment.draw.title}
-                    </td>
-                    <td className="py-4 px-4 text-sm text-gray-600 font-mono">
-                      {payment.transactionId}
-                    </td>
-                    <td className="py-4 px-4 text-sm font-bold text-gray-900 text-right">
-                      ₹{payment.amount}
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <Badge variant={getStatusVariant(payment.status)}>
-                        {payment.status}
-                      </Badge>
-                    </td>
-                    <td className="py-4 px-4 text-sm text-gray-600 text-right">
-                      {new Date(payment.createdAt).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+      <StatsGrid data={stats} />
+      <RevenueChart data={analytics} />
+      <RecentActivity data={activity} />
     </div>
   );
 }
