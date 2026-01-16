@@ -26,7 +26,7 @@ export function ImageUploader({ value, onChange, folder = "draws", label = "Bann
     formData.append("folder", folder);
 
     try {
-      const res = await fetch("/api/admin/upload", {
+      const res = await fetch("/api/user/upload", {
         method: "POST",
         body: formData,
       });
