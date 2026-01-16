@@ -17,26 +17,52 @@ export default function ForgotPasswordForm() {
     newPassword: ''
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
+  const validate = () => {
+  if (!/^\d{10}$/.test(formData.mobile)) {
+    return "Enter a valid registered mobile number";
+  }
 
-    try {
-      // Added <void> since we only care about success/message
-      const res = await api.post<void>('/auth/forgot-password', formData);
-      
-      if (res.success) {
-        setSuccess(true);
-      } else {
-        setError(res.message || 'Update failed');
-      }
-    } catch (err) {
-      setError('Something went wrong.');
-    } finally {
-      setLoading(false);
+if (formData.oldPassword.length < 8) {
+  return "Old password must be at least 8 characters";
+}
+
+if (formData.newPassword.length < 8) {
+  return "New password must be at least 8 characters";
+}
+
+  if (formData.oldPassword === formData.newPassword) {
+    return "New password must be different from old password";
+  }
+
+  return null;
+};
+
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  const validationError = validate();
+  if (validationError) {
+    setError(validationError);
+    return;
+  }
+
+  setLoading(true);
+  setError('');
+
+  try {
+    const res = await api.post<void>('/auth/forgot-password', formData);
+
+    if (res.success) {
+      setSuccess(true);
+    } else {
+      setError(res.message || 'Update failed');
     }
-  };
+  } catch {
+    setError('Something went wrong.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   if (success) {
     return (
@@ -66,19 +92,27 @@ export default function ForgotPasswordForm() {
       )}
 
       <BentoInput
-        icon={Phone}
-        label="Mobile Number"
-        type="tel"
-        placeholder="Registered mobile"
-        value={formData.mobile}
-        onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
-        required
-      />
+  icon={Phone}
+  label="Mobile Number"
+  type="tel"
+  inputMode="numeric"
+  maxLength={10}
+  placeholder="Registered mobile"
+  value={formData.mobile}
+  onChange={(e) => {
+    const value = e.target.value.replace(/\D/g, '');
+    if (value.length <= 10) {
+      setFormData({ ...formData, mobile: value });
+    }
+  }}
+  required
+/>
 
       <BentoInput
         icon={KeyRound}
         label="Old Password"
         type="password"
+        minLength={8}
         placeholder="Enter current password"
         value={formData.oldPassword}
         onChange={(e) => setFormData({ ...formData, oldPassword: e.target.value })}
@@ -89,6 +123,7 @@ export default function ForgotPasswordForm() {
         icon={Lock}
         label="New Password"
         type="password"
+        minLength={8}
         placeholder="Minimum 6 characters"
         value={formData.newPassword}
         onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}

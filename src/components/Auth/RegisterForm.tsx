@@ -1,40 +1,66 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { User, Phone, Lock, Mail } from 'lucide-react';
-import { api } from '@/lib/api-client';
-import BentoInput from '../LandingUI/BentoInput';
-import GradientButton from '../LandingUI/GradientButton';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { User, Phone, Lock, Mail } from "lucide-react";
+import { api } from "@/lib/api-client";
+import BentoInput from "../LandingUI/BentoInput";
+import GradientButton from "../LandingUI/GradientButton";
 
 export default function RegisterForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [formData, setFormData] = useState({
-    name: '',
-    mobile: '',
-    email: '',
-    password: ''
+    name: "",
+    mobile: "",
+    email: "",
+    password: "",
   });
+
+  const validate = () => {
+    if (!formData.name.trim()) {
+      return "Name is required";
+    }
+
+    if (!/^\d{10}$/.test(formData.mobile)) {
+      return "Enter a valid 10-digit mobile number";
+    }
+
+    if (formData.email && !/^\S+@\S+\.\S+$/.test(formData.email)) {
+      return "Enter a valid email address";
+    }
+
+    if (formData.password.length < 8) {
+      return "Password must be at least 8 characters";
+    }
+
+    return null;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const validationError = validate();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setLoading(true);
-    setError('');
+    setError("");
 
     try {
-      // Added generic type to match API response
-      const res = await api.post<{ id: string }>('/auth/register', formData);
-      
+      const res = await api.post<{ id: string }>("/auth/register", formData);
+
       if (res.success) {
-        router.push('/signin?registered=true');
+        router.push("/signin?registered=true");
       } else {
-        setError(res.message || 'Registration failed');
+        setError(res.message || "Registration failed");
       }
-    } catch (err) {
-      setError('Registration failed. Please check your details.');
+    } catch {
+      setError("Registration failed. Please check your details.");
     } finally {
       setLoading(false);
     }
@@ -62,9 +88,16 @@ export default function RegisterForm() {
         icon={Phone}
         label="Mobile Number"
         type="tel"
+        inputMode="numeric"
+        maxLength={10}
         placeholder="9876543210"
         value={formData.mobile}
-        onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
+        onChange={(e) => {
+          const value = e.target.value.replace(/\D/g, "");
+          if (value.length <= 10) {
+            setFormData({ ...formData, mobile: value });
+          }
+        }}
         required
       />
 
@@ -81,7 +114,8 @@ export default function RegisterForm() {
         icon={Lock}
         label="Password"
         type="password"
-        placeholder="Create a strong password"
+        minLength={8}
+        placeholder="Minimum 8 characters"
         value={formData.password}
         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
         required
@@ -92,8 +126,11 @@ export default function RegisterForm() {
       </GradientButton>
 
       <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-        Already have an account?{' '}
-        <Link href="/signin" className="font-bold text-gray-900 dark:text-white hover:underline">
+        Already have an account?{" "}
+        <Link
+          href="/signin"
+          className="font-bold text-gray-900 dark:text-white hover:underline"
+        >
           Sign In
         </Link>
       </p>
