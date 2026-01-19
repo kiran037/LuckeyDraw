@@ -12,9 +12,14 @@ interface HeaderUser {
   name?: string | null;
   avatar?: string | null;
   wallet?: number;
-  unreadCount:number;
+  unreadCount: number;
 }
 
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  message?: string;
+}
 export default function Header() {
   const [user, setUser] = useState<HeaderUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -22,17 +27,21 @@ export default function Header() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const response = await api.get('/me');
+        const response = await api.get<HeaderUser>('/me');
         if (response.success && response.data) {
-          setUser(response.data);
+          setUser(response.data); // ✅ NO ERROR
+        } else {
+          setUser(null);
         }
-      } catch (e) {
-        console.error('Failed to fetch user', e);
+      } catch (err) {
+        console.error('Failed to fetch user', err);
+        setUser(null);
       } finally {
         setLoading(false);
       }
     };
-    void fetchUser();
+
+    fetchUser();
   }, []);
 
   return (
@@ -83,20 +92,20 @@ export default function Header() {
                 </Link>
 
                 {/* NOTIFICATIONS */}
-               <Link
-  href="/user/notifications"
-  className="relative group w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center
+                <Link
+                  href="/user/notifications"
+                  className="relative group w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center
              rounded-full bg-gray-100 dark:bg-white/5
              text-gray-600 dark:text-gray-300
              hover:bg-white hover:shadow-md dark:hover:bg-white/10 transition-all"
->
-  <Bell size={18} />
+                >
+                  <Bell size={18} />
 
-   <span
-      className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border border-white dark:border-[#0B0E14] shadow" >
-      {user.unreadCount > 99 ? '99+' : user.unreadCount || 0}
-    </span>
-</Link>
+                  <span
+                    className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border border-white dark:border-[#0B0E14] shadow" >
+                    {user.unreadCount > 99 ? '99+' : user.unreadCount || 0}
+                  </span>
+                </Link>
 
                 {/* USER MENU */}
                 <UserMenu user={user} />
