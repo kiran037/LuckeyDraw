@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
-import { payment_status, ticket_status, ticket_source, Prisma } from "@/generated/client/client";
+import { payment_status, ticket_status, ticket_source, wallet_transaction_type, wallet_transaction_source, Prisma } from "@/generated/client/client";
 
 /* =========================
    GET — View Single Payment (For Reviewing)
@@ -56,132 +56,172 @@ export async function PUT(
     const newStatus = body.status as payment_status;
     const remark = body.remark || "";
 
-    // Validate Status
-    if (newStatus !== payment_status.APPROVED && newStatus !== payment_status.REJECTED) {
-      return errorResponse("Invalid status. Must be APPROVED or REJECTED.", 400);
+    if (
+      newStatus !== payment_status.APPROVED &&
+      newStatus !== payment_status.REJECTED
+    ) {
+      return errorResponse(
+        "Invalid status. Must be APPROVED or REJECTED.",
+        400
+      );
     }
 
-    // 1. Fetch existing payment AND related Draw details
     const payment = await prisma.payment.findUnique({
       where: { id: BigInt(id) },
       include: {
-        draw: { 
-          select: { 
-            id: true, 
-            entryFee: true, 
-            maxTickets: true, 
-            _count: { select: { ticket: true } } 
-          } 
-        }
-      }
+        draw: {
+          select: {
+            id: true,
+            title: true,
+            entryFee: true,
+            maxTickets: true,
+            _count: { select: { ticket: true } },
+          },
+        },
+      },
     });
 
     if (!payment) return errorResponse("Payment not found", 404);
 
-    // 2. Prevent double processing
     if (payment.status !== payment_status.PENDING) {
       return errorResponse(`Payment is already ${payment.status}`, 400);
     }
 
-    // =================================================
-    // LOGIC: REJECT
-    // =================================================
+    /* =====================================================
+       REJECT
+    ===================================================== */
     if (newStatus === payment_status.REJECTED) {
-      const rejected = await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: payment_status.REJECTED,
-          failureReason: remark || "Rejected by Admin"
+      await prisma.$transaction(async (tx) => {
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: payment_status.REJECTED,
+            failureReason: remark || "Rejected by Admin",
+          },
+        });
+        // 2️⃣ WALLET REFUND (VERY IMPORTANT)
+        if (payment.walletUsed && payment.walletUsed > 0) {
+
+          // 🔹 Get current wallet balance
+          const user = await tx.user.findUnique({
+            where: { id: payment.userId },
+            select: { wallet: true },
+          });
+
+          const newBalance = user!.wallet + payment.walletUsed;
+
+          // 🔹 Update wallet
+          await tx.user.update({
+            where: { id: payment.userId },
+            data: {
+              wallet: newBalance,
+            },
+          });
+
+          // 🔹 Wallet transaction (CREDIT)
+          await tx.walletTransaction.create({
+            data: {
+              userId: payment.userId,
+              amount: payment.walletUsed,
+              balanceAfter: newBalance,
+              type: wallet_transaction_type.CREDIT,
+              source: wallet_transaction_source.REFUND,
+              referenceId: payment.id,
+              remark: `Refund for rejected payment of draw #${payment.draw.id}`,
+            },
+          });
         }
+
+        // 🔔 USER NOTIFICATION
+        await tx.notification.create({
+          data: {
+            userId: payment.userId,
+            title: "Payment Rejected ❌",
+            message: `Your payment for draw "${payment.draw.title}" was rejected. ${remark ? "Reason: " + remark : ""
+              }`,
+          },
+        });
+
+        // 🧾 AUDIT LOG
+        await tx.auditlog.create({
+          data: {
+            action: "PAYMENT_REJECTED",
+            entity: "PAYMENT",
+            entityId: payment.id,
+            adminId: BigInt(admin.id),
+            meta: JSON.stringify({ remark }),
+          },
+        });
       });
 
-      // Audit Log
-      await prisma.auditlog.create({
-        data: {
-          action: "PAYMENT_REJECTED",
-          entity: "PAYMENT",
-          entityId: payment.id,
-          adminId: BigInt(admin.id),
-          meta: JSON.stringify({ remark }),
-        },
+      return jsonResponse({
+        success: true,
+        message: "Payment Rejected & User Notified",
       });
-
-      return jsonResponse({ success: true, message: "Payment Rejected", payment: rejected });
     }
 
-    // =================================================
-    // LOGIC: APPROVE (Generate Tickets)
-    // =================================================
-    
-    // 3. Calculate Ticket Count
+    /* =====================================================
+       APPROVE
+    ===================================================== */
+
     const entryFee = payment.draw.entryFee;
-    let ticketCount = 0;
-
-    if (entryFee > 0) {
-      ticketCount = Math.floor(payment.amount / entryFee);
-    } else {
-      return errorResponse("Cannot process payment for free draw via this route", 400);
-    }
+    const ticketCount = Math.floor(payment.amount / entryFee);
 
     if (ticketCount < 1) {
-      return errorResponse(`Amount ${payment.amount} is less than entry fee ${entryFee}`, 400);
+      return errorResponse("Invalid payment amount", 400);
     }
 
-    // 4. Check Ticket Availability
     const currentSold = payment.draw._count.ticket;
-    const maxTickets = payment.draw.maxTickets;
-
-    if (currentSold + ticketCount > maxTickets) {
-      return errorResponse(`Not enough tickets left. Requested: ${ticketCount}, Remaining: ${maxTickets - currentSold}`, 400);
+    if (currentSold + ticketCount > payment.draw.maxTickets) {
+      return errorResponse("Not enough tickets left", 400);
     }
 
-    // 5. Generate Ticket Data
-    // FIX: Using lowercase 'ticket' as suggested by your error message
-    const ticketsData: Prisma.ticketUncheckedCreateInput[] = []; 
+    const ticketsData: Prisma.ticketUncheckedCreateInput[] = [];
     const timestamp = Date.now();
 
     for (let i = 0; i < ticketCount; i++) {
       ticketsData.push({
-        ticketCode: `T-${payment.draw.id}-${timestamp}-${i}-${Math.floor(Math.random() * 1000)}`,
+        ticketCode: `T-${payment.draw.id}-${timestamp}-${i}-${Math.floor(
+          Math.random() * 1000
+        )}`,
         userId: payment.userId,
-        drawId: payment.drawId,
+        drawId: payment.draw.id,
         pricePaid: entryFee,
         status: ticket_status.ACTIVE,
         source: ticket_source.USER_PURCHASE,
-        // Only link paymentId to the first ticket (i === 0)
-        paymentId: i === 0 ? payment.id : null, 
+        paymentId: i === 0 ? payment.id : null,
       });
     }
 
-    // 6. Execute Transaction
     await prisma.$transaction(async (tx) => {
-      // A. Update Payment
       await tx.payment.update({
         where: { id: payment.id },
-        data: { status: payment_status.APPROVED }
+        data: { status: payment_status.APPROVED },
       });
 
-      // B. Create Tickets
-      const [firstTicket, ...restTickets] = ticketsData;
-
-      // Create first ticket (linked to payment)
+      const [firstTicket, ...rest] = ticketsData;
       await tx.ticket.create({ data: firstTicket });
+      if (rest.length > 0) await tx.ticket.createMany({ data: rest });
 
-      // Create remaining tickets (if any)
-      if (restTickets.length > 0) {
-        await tx.ticket.createMany({ data: restTickets });
-      }
+      // 🔔 USER NOTIFICATION
+      await tx.notification.create({
+        data: {
+          userId: payment.userId,
+          title: "Payment Approved ✅",
+          message: `Your payment for draw "${payment.draw.title}" has been approved. ${ticketCount} ticket(s) added to your account.`,
+        },
+      });
 
-      // C. Audit Log
+      // 🧾 AUDIT LOG
       await tx.auditlog.create({
         data: {
           action: "PAYMENT_APPROVED",
           entity: "PAYMENT",
           entityId: payment.id,
           adminId: BigInt(admin.id),
-          meta: JSON.stringify({ 
-            ticketsGenerated: ticketCount, 
-            remark 
+          meta: JSON.stringify({
+            ticketsGenerated: ticketCount,
+            remark,
           }),
         },
       });
@@ -189,9 +229,8 @@ export async function PUT(
 
     return jsonResponse({
       success: true,
-      message: `Payment Approved. ${ticketCount} tickets generated.`,
+      message: `Payment Approved. ${ticketCount} tickets generated & user notified.`,
     });
-
   } catch (err) {
     console.error("ADMIN UPDATE PAYMENT ERROR:", err);
     return errorResponse("Failed to update payment", 500);

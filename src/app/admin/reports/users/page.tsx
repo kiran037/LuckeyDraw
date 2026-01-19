@@ -11,15 +11,15 @@ async function getUsersReport() {
   const cookieStore = await cookies();
   const host = headerList.get("host");
   const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
-  
+
   try {
     const res = await fetch(`${protocol}://${host}/api/admin/reports/users?limit=50&sortBy=spend`, {
       cache: "no-store",
       headers: { Cookie: cookieStore.toString() }
     });
-    
+
     if (!res.ok) return { data: [], meta: { total: 0, page: 1, limit: 50, totalPages: 0 } };
-    
+
     return await res.json();
   } catch (e) {
     return { data: [], meta: { total: 0, page: 1, limit: 50, totalPages: 0 } };
@@ -64,6 +64,9 @@ export default async function UsersReportPage() {
                   <th className="px-5 py-3 font-medium">Total Spent</th>
                   <th className="px-5 py-3 font-medium">Tickets</th>
                   <th className="px-5 py-3 font-medium">Transactions</th>
+                  <th className="px-5 py-3 font-medium">Adhar Card</th>
+                  <th className="px-5 py-3 font-medium">Pan Card</th>
+                  <th className="px-5 py-3 font-medium">Address</th>
                   <th className="px-5 py-3 font-medium">Joined</th>
                 </tr>
               </thead>
@@ -71,6 +74,9 @@ export default async function UsersReportPage() {
                 {report.data.map((user: {
                   id: string;
                   name: string;
+                  adharcard: string;
+                  pancard: string;
+                  address: string;
                   contact: { email: string | null; mobile: string };
                   joinedAt: string;
                   stats: {
@@ -80,17 +86,16 @@ export default async function UsersReportPage() {
                   };
                 }, index: number) => {
                   const isTopSpender = index < 3;
-                  
+
                   return (
                     <tr key={user.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
                           {isTopSpender && (
-                            <Award className={`w-4 h-4 ${
-                              index === 0 ? "text-amber-500" : 
-                              index === 1 ? "text-zinc-400" : 
-                              "text-amber-700"
-                            }`} />
+                            <Award className={`w-4 h-4 ${index === 0 ? "text-amber-500" :
+                                index === 1 ? "text-zinc-400" :
+                                  "text-amber-700"
+                              }`} />
                           )}
                           <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
                             #{index + 1}
@@ -121,6 +126,21 @@ export default async function UsersReportPage() {
                       <td className="px-5 py-3.5">
                         <span className="text-sm text-zinc-900 dark:text-zinc-100">
                           {user.stats.totalTransactions}
+                        </span>
+                      </td>
+                       <td className="px-5 py-3.5">
+                        <span className="text-sm text-zinc-900 dark:text-zinc-100">
+                          {user.adharcard}
+                        </span>
+                      </td>
+                       <td className="px-5 py-3.5">
+                        <span className="text-sm text-zinc-900 dark:text-zinc-100">
+                          {user.pancard}
+                        </span>
+                      </td>
+                       <td className="px-5 py-3.5">
+                        <span className="text-sm text-zinc-900 dark:text-zinc-100">
+                          {user.address}
                         </span>
                       </td>
                       <td className="px-5 py-3.5">

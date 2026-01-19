@@ -845,7 +845,7 @@ export default function DrawForm({ initialData }: { initialData?: DrawData }) {
                   type="number"
                   value={formData.entryFee}
                   onChange={(e) => handleChange("entryFee", e.target.value)}
-                  disabled={hasTicketsSold || isReadOnly}
+                  disabled={isReadOnly}
                 />
                 <Input
                   label="Total Tickets"

@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     const baseName = file.name.replace(/\.[^/.]+$/, "");
     const filename = `${baseName}-${uniqueSuffix}${ext}`;
 
-    const relativePath = `/storage/${folder}`;
+    const relativePath = `/uploads/${folder}`;
     const uploadDir = path.join(process.cwd(), "public", relativePath);
 
     await mkdir(uploadDir, { recursive: true });

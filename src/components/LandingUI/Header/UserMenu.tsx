@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { User, LogOut, Loader2, ShieldCheck } from 'lucide-react';
-import { api } from '@/lib/api-client'; 
+import { User, LogOut, Loader2, ShieldCheck, BadgeIndianRupee, UserPlus } from 'lucide-react';
+import { api } from '@/lib/api-client';
 
 // 1. Update Interface to include 'role'
 interface HeaderUser {
@@ -72,7 +72,7 @@ export default function UserMenu({ user }: UserMenuProps) {
             </div>
           )}
         </div>
-        
+
         {/* Name - Hidden on Mobile */}
         <span className="hidden sm:block text-xs font-semibold text-gray-700 dark:text-gray-200 max-w-[100px] truncate">
           {safeName}
@@ -83,7 +83,7 @@ export default function UserMenu({ user }: UserMenuProps) {
       {isOpen && (
         <div className="absolute top-full right-0 mt-3 w-52 bg-white/80 dark:bg-[#151925]/90 backdrop-blur-xl border border-gray-200 dark:border-white/10 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="p-2 space-y-1">
-            
+
             {/* 2. Admin Button (Conditionally Rendered) */}
             {user.role === 'ADMIN' && (
               <Link
@@ -104,7 +104,30 @@ export default function UserMenu({ user }: UserMenuProps) {
               <User size={16} />
               Profile
             </Link>
-            
+            <Link
+              href="/user/transaction/wallet"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors"
+            >
+              <BadgeIndianRupee size={16} />
+              Wallet Transaction
+            </Link>
+            <Link
+              href="/user/transaction/payments"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors"
+            >
+              <BadgeIndianRupee size={16} />
+              Payments
+            </Link>
+            <Link
+              href="/user/referrals"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors"
+            >
+              <UserPlus size={16} />
+              Referral
+            </Link>
             <button
               onClick={() => {
                 setIsOpen(false);
@@ -122,7 +145,7 @@ export default function UserMenu({ user }: UserMenuProps) {
       {/* --- Logout Modal --- */}
       {showLogoutModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div 
+          <div
             className="absolute inset-0 bg-gray-900/20 dark:bg-black/40 backdrop-blur-sm"
             onClick={() => setShowLogoutModal(false)}
           />

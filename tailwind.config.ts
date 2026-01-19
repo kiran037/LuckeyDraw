@@ -25,6 +25,9 @@ const config: Config = {
         // Access sans via defaultTheme object
         sans: ["var(--font-inter)", ...defaultTheme.fontFamily.sans],
       },
+      transitionTimingFunction: {
+        smooth: "cubic-bezier(0.25, 1, 0.5, 1)",
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

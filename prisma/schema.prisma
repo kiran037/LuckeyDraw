@@ -7,7 +7,9 @@ datasource db {
   provider = "mysql"
 }
 
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// =======================
+/// AUDIT LOG
+/// =======================
 model auditlog {
   id        BigInt   @id @default(autoincrement())
   action    String
@@ -18,16 +20,16 @@ model auditlog {
   createdAt DateTime @default(now())
 }
 
+/// =======================
+/// DRAW
+/// =======================
 model draw {
   id          BigInt  @id @default(autoincrement())
   title       String
   description String?
 
-  // Long URLs / CDN paths / image references
   bannerImage String? @db.Text
-
-  // Large formatted rules / HTML / markdown
-  rules String? @db.LongText
+  rules       String? @db.LongText
 
   entryFee  Int
   startTime DateTime
@@ -40,7 +42,6 @@ model draw {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
   drawproduct drawproduct[]
   payment     payment[]
   ticket      ticket[]
@@ -51,6 +52,9 @@ model draw {
   @@index([endTime])
 }
 
+/// =======================
+/// DRAW PRODUCT
+/// =======================
 model drawproduct {
   id          BigInt   @id @default(autoincrement())
   drawId      BigInt
@@ -59,12 +63,16 @@ model drawproduct {
   quantity    Int
   description String?
   createdAt   DateTime @default(now())
-  draw        draw     @relation(fields: [drawId], references: [id], onDelete: NoAction, map: "DrawProduct_drawId_fkey")
-  winner      winner[]
 
-  @@index([drawId], map: "DrawProduct_drawId_fkey")
+  draw   draw     @relation(fields: [drawId], references: [id])
+  winner winner[]
+
+  @@index([drawId])
 }
 
+/// =======================
+/// NOTIFICATION
+/// =======================
 model notification {
   id        BigInt   @id @default(autoincrement())
   userId    BigInt
@@ -72,11 +80,15 @@ model notification {
   message   String
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
-  user      user     @relation(fields: [userId], references: [id], onDelete: NoAction, map: "Notification_userId_fkey")
 
-  @@index([userId], map: "Notification_userId_fkey")
+  user user @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
+/// =======================
+/// PAYMENT
+/// =======================
 model payment {
   id     BigInt @id @default(autoincrement())
   userId BigInt
@@ -87,9 +99,9 @@ model payment {
   gatewayOrderId   String?
   gatewayPaymentId String?
 
-  method  payment_method
-  gateway payment_gateway
-
+  method        payment_method
+  gateway       payment_gateway
+  walletUsed    Int             @default(0)
   screenshot    String?
   failureReason String?
 
@@ -107,6 +119,9 @@ model payment {
   @@index([status])
 }
 
+/// =======================
+/// TICKET
+/// =======================
 model ticket {
   id         BigInt @id @default(autoincrement())
   ticketCode String @unique
@@ -121,8 +136,7 @@ model ticket {
   source   ticket_source
   isWinner Boolean       @default(false)
 
-  coverImage String?
-
+  coverImage       String?
   createdByAdminId BigInt?
   createdAt        DateTime @default(now())
 
@@ -135,51 +149,109 @@ model ticket {
   @@index([drawId])
 }
 
+/// =======================
+/// USER
+/// =======================
 model user {
-  id       BigInt  @id @default(autoincrement())
-  email    String? @unique
-  password String
-  name     String
-
-  avatar String? @db.LongText
+  id        BigInt  @id @default(autoincrement())
+  email     String? @unique
+  password  String
+  name      String
+  adharcard String
+  pancard   String
+  address   String
+  avatar    String? @db.LongText
 
   role     user_role @default(USER)
   isActive Boolean   @default(true)
 
-  mobile    String   @unique
+  mobile String @unique
+
+  // WALLET
+  wallet Int @default(0)
+
+  // REFERRAL
+  referralCode String  @unique
+  referredById BigInt?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  referredBy user?  @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals  user[] @relation("UserReferrals")
+
+  walletTransactions WalletTransaction[]
 
   notification notification[]
   payment      payment[]
   tickets      ticket[]       @relation("UserTickets")
 
-  declaredWinners winner[] @relation("DeclaredBy") // ADD THIS
+  declaredWinners winner[] @relation("DeclaredBy")
   winners         winner[]
 }
 
+/// =======================
+/// WALLET TRANSACTION
+/// =======================
+model WalletTransaction {
+  id     BigInt @id @default(autoincrement())
+  userId BigInt
+
+  amount       Int
+  balanceAfter Int
+
+  type   wallet_transaction_type
+  source wallet_transaction_source
+
+  referenceId BigInt?
+  remark      String?
+
+  createdAt DateTime @default(now())
+
+  user user @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([type])
+  @@map("wallet_transaction")
+}
+
+/// =======================
+/// WINNER
+/// =======================
 model winner {
   id         BigInt   @id @default(autoincrement())
-  ticketId   BigInt   @unique(map: "Winner_ticketId_key")
+  ticketId   BigInt   @unique
   productId  BigInt
-  drawId     BigInt // ADD THIS - direct reference to draw
-  userId     BigInt // ADD THIS - direct reference to user (winner)
+  drawId     BigInt
+  userId     BigInt
   declaredBy BigInt
   declaredAt DateTime @default(now())
 
-  // Relations
-  drawproduct drawproduct @relation(fields: [productId], references: [id], onDelete: NoAction)
-  ticket      ticket      @relation(fields: [ticketId], references: [id], onDelete: NoAction)
-  draw        draw        @relation(fields: [drawId], references: [id], onDelete: NoAction) // ADD THIS
-  user        user        @relation(fields: [userId], references: [id], onDelete: NoAction) // ADD THIS
-  admin       user        @relation("DeclaredBy", fields: [declaredBy], references: [id], onDelete: NoAction) // ADD THIS
+  drawproduct drawproduct @relation(fields: [productId], references: [id])
+  ticket      ticket      @relation(fields: [ticketId], references: [id])
+  draw        draw        @relation(fields: [drawId], references: [id])
+  user        user        @relation(fields: [userId], references: [id])
+  admin       user        @relation("DeclaredBy", fields: [declaredBy], references: [id])
 
   @@index([productId])
-  @@index([drawId]) // ADD THIS
-  @@index([userId]) // ADD THIS
-  @@index([declaredBy]) // ADD THIS
+  @@index([drawId])
+  @@index([userId])
+  @@index([declaredBy])
 }
 
+/// =======================
+/// REFERRAL CONFIG
+/// =======================
+model referral_config {
+  id            BigInt  @id @default(autoincrement())
+  referrerBonus Int
+  refereeBonus  Int
+  isActive      Boolean @default(true)
+}
+
+/// =======================
+/// ENUMS
+/// =======================
 enum user_role {
   USER
   ADMIN
@@ -222,4 +294,17 @@ enum payment_gateway {
   STRIPE
   PAYTM
   MANUAL
+}
+
+enum wallet_transaction_type {
+  CREDIT
+  DEBIT
+}
+
+enum wallet_transaction_source {
+  REFERRAL_BONUS
+  DRAW_ENTRY
+  REFUND
+  ADMIN_ADJUSTMENT
+  WIN_REWARD
 }

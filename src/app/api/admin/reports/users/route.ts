@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     // Fetch users with counts and total spend
     // Note: Sorting by "total spent" usually requires raw SQL or post-processing in Prisma.
     // For scalability, we sort by Date in DB, and can do spend sorting on current page or filtered set.
-    
+
     const [total, users] = await prisma.$transaction([
       prisma.user.count({ where }),
       prisma.user.findMany({
@@ -40,6 +40,9 @@ export async function GET(req: NextRequest) {
         select: {
           id: true,
           name: true,
+          adharcard: true,
+          pancard: true,
+          address: true,
           email: true,
           mobile: true,
           createdAt: true,
@@ -62,6 +65,9 @@ export async function GET(req: NextRequest) {
     const report = users.map(u => ({
       id: u.id,
       name: u.name,
+      address: u.address,
+      adharcard: u.adharcard,
+      pancard: u.pancard,
       contact: { email: u.email, mobile: u.mobile },
       joinedAt: u.createdAt,
       stats: {

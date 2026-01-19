@@ -5,10 +5,15 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { User, Phone, Lock, Mail } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { useSearchParams } from "next/navigation";
 import BentoInput from "../LandingUI/BentoInput";
 import GradientButton from "../LandingUI/GradientButton";
+import { Gift } from "lucide-react";
+
 
 export default function RegisterForm() {
+  const searchParams = useSearchParams();
+  const referralFromUrl = searchParams.get("ref");
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -17,6 +22,7 @@ export default function RegisterForm() {
     mobile: "",
     email: "",
     password: "",
+    referralCode: referralFromUrl || "",
   });
 
   const validate = () => {
@@ -120,7 +126,16 @@ export default function RegisterForm() {
         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
         required
       />
-
+      <BentoInput
+        icon={Gift}
+        label="Referral Code (Optional)"
+        type="text"
+        placeholder="Enter referral code"
+        value={formData.referralCode}
+        onChange={(e) =>
+          setFormData({ ...formData, referralCode: e.target.value.toUpperCase() })
+        }
+      />
       <GradientButton type="submit" loading={loading}>
         Create Account
       </GradientButton>
