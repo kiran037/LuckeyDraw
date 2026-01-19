@@ -4,9 +4,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { 
-  Ticket as TicketIcon, Calendar, ChevronLeft, Search, 
-  Trophy, ArrowRight, Loader2, RefreshCw, Filter 
+import {
+  Ticket as TicketIcon, Calendar, ChevronLeft, Search,
+  Trophy, ArrowRight, Loader2, RefreshCw, Filter
 } from 'lucide-react';
 
 // --- Types ---
@@ -31,7 +31,7 @@ type FilterType = 'ALL' | 'WINNER' | 'ACTIVE';
 
 export default function TicketsPage() {
   const router = useRouter();
-  
+
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [filteredTickets, setFilteredTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,10 +42,10 @@ export default function TicketsPage() {
   const loadTickets = useCallback(async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const response = await api.get<Ticket[]>('/user/tickets');
-      
+
       if (!response.success) {
         setError(typeof response.message === 'string' ? response.message : 'Failed to load tickets');
       } else {
@@ -53,7 +53,7 @@ export default function TicketsPage() {
         setTickets(validTickets);
       }
     } catch (err) {
-      setError('An unexpected error occurred');
+       router.push('/signin');
     } finally {
       setLoading(false);
     }
@@ -73,8 +73,8 @@ export default function TicketsPage() {
 
     if (search) {
       const q = search.toLowerCase();
-      result = result.filter(t => 
-        t.ticketCode.toLowerCase().includes(q) || 
+      result = result.filter(t =>
+        t.ticketCode.toLowerCase().includes(q) ||
         t.draw.title.toLowerCase().includes(q)
       );
     }
@@ -101,7 +101,7 @@ export default function TicketsPage() {
         </div>
         <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Oops! Something went wrong</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-xs">{error}</p>
-        <button 
+        <button
           onClick={loadTickets}
           className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-transform"
         >
@@ -113,7 +113,7 @@ export default function TicketsPage() {
 
   return (
     <div className="relative min-h-screen bg-gray-50 dark:bg-[#0B0E14] text-gray-900 dark:text-white pb-24 sm:pb-32">
-      
+
       {/* Background Glow (Dark Mode Only) */}
       <div className="fixed inset-0 z-0 pointer-events-none select-none hidden dark:block overflow-hidden">
         <div className="absolute top-[10%] left-[-15%] w-[400px] h-[400px] bg-purple-500/8 rounded-full blur-[120px]" />
@@ -121,12 +121,12 @@ export default function TicketsPage() {
       </div>
 
       <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
-        
+
         {/* === HEADER === */}
         <div className="mb-6 sm:mb-8">
           {/* Top Bar */}
           <div className="flex items-center gap-3 mb-6">
-            <button 
+            <button
               onClick={() => router.back()}
               className="w-10 h-10 flex items-center justify-center rounded-xl bg-white dark:bg-[#151925] hover:bg-gray-100 dark:hover:bg-[#1a1f2e] border border-gray-200 dark:border-white/10 transition-all active:scale-95"
             >
@@ -155,18 +155,17 @@ export default function TicketsPage() {
                 className="w-full bg-white dark:bg-[#151925] border border-gray-200 dark:border-white/10 rounded-xl py-3 pl-11 pr-4 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500/50 transition-all"
               />
             </div>
-            
+
             {/* Filter Buttons */}
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
               {(['ALL', 'ACTIVE', 'WINNER'] as FilterType[]).map((f) => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                    filter === f 
-                      ? 'bg-gray-900 dark:bg-white text-white dark:text-black shadow-lg scale-105' 
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${filter === f
+                      ? 'bg-gray-900 dark:bg-white text-white dark:text-black shadow-lg scale-105'
                       : 'bg-white dark:bg-[#151925] text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-[#1a1f2e] active:scale-95'
-                  }`}
+                    }`}
                 >
                   {f}
                 </button>
@@ -188,7 +187,7 @@ export default function TicketsPage() {
               {search ? "Try searching with a different keyword." : "Purchase tickets to participate in draws and win amazing prizes!"}
             </p>
             {!search && (
-              <button 
+              <button
                 onClick={() => router.push('/user/draws')}
                 className="mt-6 px-6 py-2.5 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white text-sm font-bold rounded-xl transition-all shadow-lg hover:shadow-xl active:scale-95"
               >
@@ -202,16 +201,15 @@ export default function TicketsPage() {
               <div
                 key={ticket.id}
                 onClick={() => router.push(`/user/tickets/${ticket.id}`)}
-                className={`group relative rounded-2xl p-5 flex flex-col justify-between cursor-pointer transition-all duration-300 hover:-translate-y-1 border ${
-                  ticket.isWinner 
-                    ? 'bg-gradient-to-br from-yellow-50 via-orange-50 to-yellow-50 dark:from-yellow-900/10 dark:via-orange-900/10 dark:to-yellow-900/10 border-yellow-300 dark:border-yellow-500/30 shadow-lg hover:shadow-xl' 
+                className={`group relative rounded-2xl p-5 flex flex-col justify-between cursor-pointer transition-all duration-300 hover:-translate-y-1 border ${ticket.isWinner
+                    ? 'bg-gradient-to-br from-yellow-50 via-orange-50 to-yellow-50 dark:from-yellow-900/10 dark:via-orange-900/10 dark:to-yellow-900/10 border-yellow-300 dark:border-yellow-500/30 shadow-lg hover:shadow-xl'
                     : 'bg-white dark:bg-[#151925] border-gray-200 dark:border-white/10 hover:border-purple-300 dark:hover:border-purple-500/30 hover:shadow-xl'
-                }`}
+                  }`}
               >
                 {/* Decorative Circles */}
                 <div className="absolute top-1/2 -left-3 w-6 h-6 bg-gray-50 dark:bg-[#0B0E14] rounded-full -translate-y-1/2 border-r border-gray-200 dark:border-white/10" />
                 <div className="absolute top-1/2 -right-3 w-6 h-6 bg-gray-50 dark:bg-[#0B0E14] rounded-full -translate-y-1/2 border-l border-gray-200 dark:border-white/10" />
-                
+
                 {/* Winner Trophy */}
                 {ticket.isWinner && (
                   <div className="absolute top-3 right-3">
@@ -238,17 +236,16 @@ export default function TicketsPage() {
                   <h3 className="font-bold text-gray-900 dark:text-white text-sm mb-3 line-clamp-2 leading-snug pr-6">
                     {ticket.draw.title}
                   </h3>
-                  
+
                   <div className="flex items-center justify-between">
                     <div className="flex gap-2">
-                      <span className={`inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase ${
-                        ticket.draw.status === 'LIVE' 
-                          ? 'bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400' 
+                      <span className={`inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase ${ticket.draw.status === 'LIVE'
+                          ? 'bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400'
                           : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400'
-                      }`}>
+                        }`}>
                         {ticket.draw.status}
                       </span>
-                      
+
                       {ticket.isWinner && (
                         <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400">
                           Winner
