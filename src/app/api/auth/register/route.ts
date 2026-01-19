@@ -71,6 +71,9 @@ export async function POST(req: Request) {
           referralCode: generateReferralCode(),
           referredById: referredBy?.id || null,
           wallet: config ? config.refereeBonus : 0,
+          adharcard: "",
+          pancard: "",
+          address: ""
         },
       });
 
