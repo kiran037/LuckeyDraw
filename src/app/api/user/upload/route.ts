@@ -5,7 +5,7 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { requireAuth } from "@/lib/auth";
 
-const UPLOAD_ROOT = process.env.UPLOAD_PATH ?? "/var/www/project/uploads";
+const UPLOAD_ROOT = process.env.UPLOAD_PATH ?? "/var/www/project/uploads/lucky_draw";
 
 export async function POST(req: NextRequest) {
   try {
