@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Edit2, UserX, UserCheck, Loader2, Users } from "lucide-react";
 import { Badge } from "@/components/AdminUI/ui/Badge";
 import { Button } from "@/components/AdminUI/ui/Button";
+import { getImageUrl } from "@/lib/image";
 
 interface UserItem {
   id: string;
@@ -96,7 +97,7 @@ export default function UserList({ users }: UserListProps) {
                     <div className="w-9 h-9 rounded-full bg-zinc-200 flex items-center justify-center overflow-hidden">
                       {user.avatar ? (
                         <img
-                          src={user.avatar}
+                          src={getImageUrl(user.avatar)}
                           alt={user.name ?? "User"}
                           className="w-full h-full object-cover"
                         />

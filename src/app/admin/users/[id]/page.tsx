@@ -4,6 +4,7 @@ import { headers, cookies } from "next/headers";
 import Link from "next/link";
 import { Badge } from "@/components/AdminUI/ui/Badge";
 import AddWalletModal from "@/components/AdminUI/Users/AddWalletModal";
+import { getImageUrl } from "@/lib/image";
 
 
 /* ================= TYPES ================= */
@@ -53,6 +54,7 @@ interface Winner {
 interface UserDashboard {
     id: bigint;
     name: string;
+    avatar: string;
     email: string | null;
     mobile: string;
     role: string;
@@ -125,11 +127,24 @@ export default async function UserViewPage({
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div className="flex items-start gap-4">
-                            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg">
-                                <span className="text-2xl font-bold text-white">
-                                    {user.name.charAt(0).toUpperCase()}
-                                </span>
-                            </div>
+
+
+                            {user.avatar ? (
+                                <div className="w-14 h-14 rounded-full bg-zinc-200 flex items-center justify-center overflow-hidden">
+                                    <img
+                                        src={getImageUrl(user.avatar)}
+                                        alt={user.name ?? "User"}
+                                        className="w-full rounded-full h-full object-cover"
+                                    />
+                                </div>
+                            ) : (
+                                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg">
+                                    <span className="text-2xl font-bold text-white">
+                                        {(user.name ?? "U").charAt(0).toUpperCase()}
+                                    </span>
+                                </div>
+                            )}
+
                             <div>
                                 <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">
                                     {user.name}
@@ -424,7 +439,7 @@ function Card({ title, icon, children, count }: { title: string; icon?: string; 
                             {count} {count === 1 ? 'item' : 'items'}
                         </span>
                     )}
-                    
+
                 </div>
             </div>
             <div className="p-6">
