@@ -17,12 +17,10 @@ export async function GET(request: NextRequest) {
 
     const where: Prisma.userWhereInput = {};
 
-    // Filter by role
     if (role && Object.values(user_role).includes(role)) {
       where.role = role;
     }
 
-    // Search by name, email, or mobile
     if (search) {
       where.OR = [
         { name: { contains: search } },
@@ -60,7 +58,6 @@ export async function GET(request: NextRequest) {
       },
       users,
     });
-
   } catch (error) {
     console.error("ADMIN GET USERS ERROR:", error);
     return errorResponse("Failed to fetch users", 500);
