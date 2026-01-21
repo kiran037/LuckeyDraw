@@ -16,7 +16,7 @@ export default function SettingsForm({ id, referrerBonus, refereeBonus }: Settin
     const [success, setSuccess] = useState(false);
 
     const [formData, setFormData] = useState({
-        id:id,
+        id: id,
         referrerBonus: referrerBonus,
         refereeBonus: refereeBonus,
     });
@@ -58,6 +58,7 @@ export default function SettingsForm({ id, referrerBonus, refereeBonus }: Settin
 
     const handleReset = () => {
         setFormData({
+            id: id,
             referrerBonus: referrerBonus,
             refereeBonus: refereeBonus,
         });
