@@ -1,67 +1,89 @@
+import { NextRequest, NextResponse } from "next/server";
+import path from "path";
+import fs from "fs";
+import { Readable } from "stream";
+import { ReadableStream } from "stream/web";
+
 export const runtime = "nodejs";
 
-import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
-import { requireAuth } from "@/lib/auth";
+const UPLOAD_ROOT = path.resolve(process.env.UPLOAD_PATH || "uploads");
+
+if (!fs.existsSync(UPLOAD_ROOT)) {
+  fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
+}
+
+const MAX_MB = 200; // change if needed
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
-    const folderValue = formData.get("folder");
-
-    const folder =
-      typeof folderValue === "string" && folderValue.trim()
-        ? folderValue
-        : "misc";
+    const folderRaw = formData.get("folder");
 
     if (!file) {
+      return NextResponse.json({ error: "No file" }, { status: 400 });
+    }
+
+    const folder =
+      typeof folderRaw === "string"
+        ? folderRaw.toLowerCase().replace(/[^a-z0-9-_]/g, "")
+        : "misc";
+
+    const maxBytes = MAX_MB * 1024 * 1024;
+    if (file.size > maxBytes) {
       return NextResponse.json(
-        { error: "No file received" },
+        { error: `File too large. Max ${MAX_MB}MB` },
         { status: 400 }
       );
     }
 
-    // file buffer
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const targetDir = path.join(UPLOAD_ROOT, folder);
+    await fs.promises.mkdir(targetDir, { recursive: true });
 
-    // unique filename
-    const uniqueSuffix =
-      Date.now() + "-" + Math.round(Math.random() * 1e9);
     const ext = path.extname(file.name);
-    const baseName = file.name.replace(/\.[^/.]+$/, "");
-    const filename = `${baseName}-${uniqueSuffix}${ext}`;
+    const base = path
+      .basename(file.name, ext)
+      .toLowerCase()
+      .replace(/[^a-z0-9-_]/g, "")
+      .slice(0, 60);
 
-    // ✅ NEXT PUBLIC UPLOAD PATH
-    const uploadDir = path.join(
-      process.cwd(),
-      "public",
-      "uploads",
-      folder
-    );
+    const filename = `${Date.now()}-${base}${ext}`;
+    const diskPath = path.join(targetDir, filename);
+    const tmpPath = diskPath + ".part";
 
-    await mkdir(uploadDir, { recursive: true });
+    // Convert File stream to Node.js Readable stream
+    const webStream = file.stream() as unknown as ReadableStream<Uint8Array>;
+    const nodeStream = Readable.fromWeb(webStream);
 
-    const filePath = path.join(uploadDir, filename);
-    await writeFile(filePath, buffer);
+    let written = 0;
+    await new Promise<void>((resolve, reject) => {
+      const out = fs.createWriteStream(tmpPath);
 
-    // ✅ PUBLIC URL (AUTO SERVED BY NEXT)
+      nodeStream.on("data", (chunk: Buffer) => {
+        written += chunk.length;
+        if (written > maxBytes) {
+          out.destroy(new Error("File too large"));
+          nodeStream.destroy();
+        }
+      });
+
+      nodeStream.on("error", reject);
+      out.on("error", reject);
+      out.on("finish", resolve);
+
+      nodeStream.pipe(out);
+    });
+
+    await fs.promises.rename(tmpPath, diskPath);
+
+    const url = `/uploads/${folder}/${filename}`;
+
     return NextResponse.json({
       success: true,
-      path: `/uploads/${folder}/${filename}`,
+      path: url,
     });
-  } catch (error) {
-    console.error("Upload Error:", error);
-    return NextResponse.json(
-      { error: "Upload failed" },
-      { status: 500 }
-    );
+  } catch (err) {
+    console.error("Upload error:", err);
+    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }

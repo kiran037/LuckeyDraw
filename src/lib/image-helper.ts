@@ -1,3 +1,4 @@
+///Users/xeoren/Desktop/lucky_draw/src/lib/image-helper.ts
 export const getImageUrl = (path?: string | null) => {
   // 1️⃣ No image → placeholder
   if (!path || typeof path !== "string" || path.trim() === "") {
