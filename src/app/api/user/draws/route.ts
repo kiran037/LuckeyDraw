@@ -1,5 +1,5 @@
 import { count, eq, lte, gt, and, or, inArray, desc, asc, SQL } from "drizzle-orm";
-import { db, draw, draw_status } from "@/db";
+import { db, draw, draw_status, ticket } from "@/db";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +52,8 @@ export async function GET(request: Request) {
         },
         with: {
           tickets: {
-            columns: { id: true, status: true },
+            where: eq(ticket.status, "ACTIVE"),
+            columns: { id: true },
           },
           drawproducts: {
             limit: 1,
@@ -65,10 +66,7 @@ export async function GET(request: Request) {
     const total = Number(totalRes[0]?.count ?? 0);
 
     const formattedDraws = drawsList.map((d) => {
-      const activeTickets = (d.tickets || []).filter(
-        (t) => t.status === "ACTIVE"
-      );
-      const sold = activeTickets.length;
+      const sold = (d.tickets || []).length;
       const totalTickets = d.maxTickets || 1;
       const progress = Math.min(Math.round((sold / totalTickets) * 100), 100);
 
@@ -83,7 +81,7 @@ export async function GET(request: Request) {
         maxTickets: d.maxTickets,
         resultAt: d.resultAt,
         drawproduct: d.drawproducts || [],
-        stats: { sold, total: totalTickets, progress },
+        stats: { sold, total: totalTickets, progress, percentage: progress },
       };
     });
 

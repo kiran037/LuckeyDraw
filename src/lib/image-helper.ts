@@ -5,8 +5,8 @@ export const getImageUrl = (path?: string | null) => {
     return "/placeholder-image.png";
   }
 
-  // 2️⃣ Absolute URL (Cloudinary / S3 / external)
-  if (/^https?:\/\//i.test(path)) {
+  // 2️⃣ Base64 data URI or Absolute URL (Cloudinary / S3 / external)
+  if (path.startsWith("data:") || /^https?:\/\//i.test(path)) {
     return path;
   }
 

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { count, eq, and, desc, SQL, ilike } from "drizzle-orm";
+import { count, eq, and, desc, SQL, ilike, inArray } from "drizzle-orm";
 import { db, winner, user } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
@@ -27,9 +27,7 @@ export async function GET(req: NextRequest) {
       });
       const userIds = matchingUsers.map((u) => u.id);
       if (userIds.length > 0) {
-        conditions.push(
-          eq(winner.userId, userIds[0]) // or inArray if multiple
-        );
+        conditions.push(inArray(winner.userId, userIds));
       } else {
         return jsonResponse({
           meta: { total: 0, page, limit, totalPages: 0 },

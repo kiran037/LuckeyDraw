@@ -12,22 +12,7 @@ export function fileToBase64(file: File): Promise<string> {
   });
 }
 
-/**
- * Get absolute image URL
- * Handles both base64 and relative paths
- */
-export function getImageUrl(imagePath: string | null | undefined): string {
-  if (!imagePath) return '/placeholder-image.png';
-  
-  // If it's already a base64 or external URL, return as-is
-  if (imagePath.startsWith('data:') || imagePath.startsWith('http')) {
-    return imagePath;
-  }
-  
-  // Otherwise, make it absolute using APP_URL
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  return `${appUrl}${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
-}
+export { getImageUrl } from "./image-helper";
 
 /**
  * Validate image file

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { count, or, ilike, eq, desc, SQL } from "drizzle-orm";
-import { db, user, payment } from "@/db";
+import { count, or, ilike, desc, SQL } from "drizzle-orm";
+import { db, user } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
 

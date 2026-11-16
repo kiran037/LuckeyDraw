@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { eq, desc } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth";
-import { db, user, ticket, payment, walletTransaction, winner } from "@/db";
+import { db, user, ticket, payment, walletTransaction } from "@/db";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
 
 export async function GET(
@@ -9,7 +9,8 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
+    if (!admin) return errorResponse("Unauthorized", 401);
 
     const { id } = await context.params;
     const userId = BigInt(id);
@@ -39,9 +40,13 @@ export async function GET(
 
     if (!foundUser) return errorResponse("User not found", 404);
 
+    // Explicitly exclude password hash from the response
+    const safeUser = { ...foundUser };
+    delete (safeUser as { password?: string }).password;
+
     return jsonResponse({
       user: {
-        ...foundUser,
+        ...safeUser,
         payment: foundUser.payments,
       },
     });

@@ -64,7 +64,7 @@ export default function DrawDetailsPage() {
         } else {
           setError(res.message || "Failed to load draw details");
         }
-      } catch (err) {
+      } catch {
         setError("Network error occurred");
       } finally {
         setLoading(false);
@@ -83,7 +83,7 @@ export default function DrawDetailsPage() {
         hour: '2-digit',
         minute: '2-digit'
       });
-    } catch (e) {
+    } catch {
       return "Invalid Date";
     }
   };
@@ -253,10 +253,9 @@ export default function DrawDetailsPage() {
                 <h3 className="font-bold mb-3 flex items-center gap-2 text-gray-900 dark:text-white">
                    <Info size={18} className="text-gray-400" /> Rules
                 </h3>
-                <div 
-                  className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed prose prose-sm dark:prose-invert max-w-none" 
-                  dangerouslySetInnerHTML={{ __html: draw.rules }} 
-                />
+                <div className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed whitespace-pre-line">
+                  {draw.rules}
+                </div>
              </div>
           )}
         </div>

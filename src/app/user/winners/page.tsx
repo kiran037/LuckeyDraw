@@ -220,7 +220,7 @@ export default function WinnersPage() {
             setError(res.message || res.error || "Failed to load winners");
           }
         }
-      } catch (err) {
+      } catch {
         if (isMounted) setError("An unexpected error occurred");
       } finally {
         if (isMounted) setLoading(false);

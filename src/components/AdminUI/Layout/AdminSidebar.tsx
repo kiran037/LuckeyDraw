@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import {
   LayoutGrid, Package, CreditCard, Ticket, Trophy,
   BarChart3,
-  Users
+  Users,
+  Settings
 } from "lucide-react";
 
 // Simplified menu items
@@ -17,7 +18,8 @@ const MENU_ITEMS = [
   { label: "Tickets", icon: Ticket, href: "/admin/tickets" },
   { label: "Users", icon: Users , href: "/admin/users" },
   { label: "Reports", icon: BarChart3, href: "/admin/reports" },
-]
+  { label: "Settings", icon: Settings, href: "/admin/settings" },
+];
 
 export default function AdminSidebar() {
   const pathname = usePathname();

@@ -22,7 +22,7 @@ async function getDraws() {
     
     const json = await res.json();
     return json; 
-  } catch (e) {
+  } catch {
     return { draws: [], meta: { total: 0, page: 1, limit: 10, totalPages: 0 } };
   }
 }

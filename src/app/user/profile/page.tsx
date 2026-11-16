@@ -141,7 +141,7 @@ export default function ProfilePage() {
       } else {
         alert(res.message || "Failed to update");
       }
-    } catch (e) {
+    } catch {
       alert("Server error");
     }
     setIsSaving(false);

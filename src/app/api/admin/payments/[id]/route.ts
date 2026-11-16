@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import {
   db,
   payment,
@@ -97,26 +97,34 @@ export async function PUT(
     /* REJECT */
     if (newStatus === payment_status.REJECTED) {
       await db.transaction(async (tx) => {
-        await tx
+        const [updatedPayment] = await tx
           .update(payment)
           .set({
             status: payment_status.REJECTED,
             failureReason: remark || "Rejected by Admin",
           })
-          .where(eq(payment.id, foundPayment.id));
+          .where(
+            and(
+              eq(payment.id, foundPayment.id),
+              eq(payment.status, payment_status.PENDING)
+            )
+          )
+          .returning();
+
+        if (!updatedPayment) {
+          throw new Error("Payment was already processed by another request");
+        }
 
         if (foundPayment.walletUsed && foundPayment.walletUsed > 0) {
-          const foundUser = await tx.query.user.findFirst({
-            where: eq(user.id, foundPayment.userId),
-            columns: { wallet: true },
-          });
-
-          const newBalance = (foundUser?.wallet ?? 0) + foundPayment.walletUsed;
-
-          await tx
+          const [updatedUser] = await tx
             .update(user)
-            .set({ wallet: newBalance })
-            .where(eq(user.id, foundPayment.userId));
+            .set({
+              wallet: sql`${user.wallet} + ${foundPayment.walletUsed}`,
+            })
+            .where(eq(user.id, foundPayment.userId))
+            .returning({ wallet: user.wallet });
+
+          const newBalance = updatedUser?.wallet ?? foundPayment.walletUsed;
 
           await tx.insert(walletTransaction).values({
             userId: foundPayment.userId,
@@ -154,7 +162,8 @@ export async function PUT(
 
     /* APPROVE */
     const entryFee = foundPayment.draw.entryFee;
-    const ticketCount = Math.floor(foundPayment.amount / entryFee);
+    const totalPaid = (foundPayment.walletUsed || 0) + foundPayment.amount;
+    const ticketCount = Math.max(1, Math.floor(totalPaid / entryFee));
 
     if (ticketCount < 1) {
       return errorResponse("Invalid payment amount", 400);
@@ -171,22 +180,32 @@ export async function PUT(
     for (let i = 0; i < ticketCount; i++) {
       ticketsData.push({
         ticketCode: `T-${foundPayment.draw.id}-${timestamp}-${i}-${Math.floor(
-          Math.random() * 1000
+          Math.random() * 10000
         )}`,
         userId: foundPayment.userId,
         drawId: foundPayment.draw.id,
         pricePaid: entryFee,
         status: ticket_status.ACTIVE,
         source: ticket_source.USER_PURCHASE,
-        paymentId: i === 0 ? foundPayment.id : null,
+        paymentId: foundPayment.id,
       });
     }
 
     await db.transaction(async (tx) => {
-      await tx
+      const [updatedPayment] = await tx
         .update(payment)
         .set({ status: payment_status.APPROVED })
-        .where(eq(payment.id, foundPayment.id));
+        .where(
+          and(
+            eq(payment.id, foundPayment.id),
+            eq(payment.status, payment_status.PENDING)
+          )
+        )
+        .returning();
+
+      if (!updatedPayment) {
+        throw new Error("Payment was already processed by another request");
+      }
 
       await tx.insert(ticket).values(ticketsData);
 

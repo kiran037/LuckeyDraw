@@ -15,11 +15,6 @@ interface HeaderUser {
   unreadCount: number;
 }
 
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  message?: string;
-}
 export default function Header() {
   const [user, setUser] = useState<HeaderUser | null>(null);
   const [loading, setLoading] = useState(true);

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save, User, Lock, Mail, Phone, Loader2 } from "lucide-react";
 import { Button } from "@/components/AdminUI/ui/Button";
-import { Input } from "@/components/AdminUI/ui/Input";
 import { ImageUploader } from "@/components/AdminUI/ui/ImageUploader";
 import { Card } from "@/components/AdminUI/ui/Card";
 

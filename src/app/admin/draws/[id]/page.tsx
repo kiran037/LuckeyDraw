@@ -19,7 +19,7 @@ async function getDraw(id: string) {
     
     const json = await res.json();
     return json.draw; 
-  } catch (e) {
+  } catch {
     return null;
   }
 }

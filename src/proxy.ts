@@ -28,7 +28,7 @@ export async function proxy(request: NextRequest) {
         } else {
           return NextResponse.redirect(new URL("/", request.url));
         }
-      } catch (e) {
+      } catch {
         // Invalid token, allow access to signin
       }
     }
@@ -46,7 +46,7 @@ export async function proxy(request: NextRequest) {
         return NextResponse.redirect(new URL("/", request.url));
       }
       return NextResponse.next();
-    } catch (e) {
+    } catch {
       return logoutAndRedirect(request);
     }
   }
@@ -58,7 +58,7 @@ export async function proxy(request: NextRequest) {
     try {
       await jwtVerify(token, secret);
       return NextResponse.next();
-    } catch (e) {
+    } catch {
       return logoutAndRedirect(request);
     }
   }
@@ -79,7 +79,7 @@ export async function proxy(request: NextRequest) {
         );
       }
       return NextResponse.next();
-    } catch (e) {
+    } catch {
       return NextResponse.json({ success: false, message: "Invalid token" }, { status: 401 });
     }
   }

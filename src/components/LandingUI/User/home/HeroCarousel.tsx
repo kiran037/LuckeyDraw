@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { CAROUSEL_IMAGES, AUTO_SLIDE_INTERVAL } from '@/lib/carousel-config';
-import { ArrowRight } from 'lucide-react';
 
 export default function HeroCarousel() {
   const [currentIndex, setCurrentIndex] = useState(0);

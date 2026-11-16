@@ -65,7 +65,7 @@ export default function HomePage() {
         } else {
           setError(response.message || 'Failed to load data');
         }
-      } catch (err) {
+      } catch {
         setError('Connection failed');
       } finally {
         setLoading(false);

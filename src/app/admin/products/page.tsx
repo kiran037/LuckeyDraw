@@ -27,7 +27,7 @@ async function getProducts() {
     
     const json = await res.json();
     return json; 
-  } catch (e) {
+  } catch {
     return { 
       products: [], 
       meta: { total: 0, page: 1, limit: 20, totalPages: 0 } 

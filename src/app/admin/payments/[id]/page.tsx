@@ -19,7 +19,7 @@ async function getPayment(id: string) {
     
     const json = await res.json();
     return json.payment; 
-  } catch (e) {
+  } catch {
     return null;
   }
 }

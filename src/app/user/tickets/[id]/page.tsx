@@ -7,7 +7,7 @@ import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { getImageUrl } from '@/lib/image';
 import { 
   ArrowLeft, Share2, CreditCard, Trophy, 
-  Calendar, CheckCircle2, Loader2, AlertCircle, Download, ExternalLink
+  Calendar, CheckCircle2, Loader2, AlertCircle, ExternalLink
 } from 'lucide-react';
 
 // --- Types ---

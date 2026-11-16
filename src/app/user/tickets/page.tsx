@@ -6,7 +6,7 @@ import { api } from '@/lib/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import {
   Ticket as TicketIcon, Calendar, ChevronLeft, Search,
-  Trophy, ArrowRight, Loader2, RefreshCw, Filter
+  Trophy, ArrowRight, Loader2, RefreshCw
 } from 'lucide-react';
 
 // --- Types ---
@@ -52,12 +52,12 @@ export default function TicketsPage() {
         const validTickets = Array.isArray(response.data) ? response.data : [];
         setTickets(validTickets);
       }
-    } catch (err) {
+    } catch {
        router.push('/signin');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     loadTickets();
@@ -197,7 +197,7 @@ export default function TicketsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            {filteredTickets.map((ticket, index) => (
+            {filteredTickets.map((ticket) => (
               <div
                 key={ticket.id}
                 onClick={() => router.push(`/user/tickets/${ticket.id}`)}

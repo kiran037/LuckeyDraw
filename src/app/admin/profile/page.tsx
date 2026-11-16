@@ -49,10 +49,12 @@ export default async function ProfilePage() {
               We couldn't retrieve your profile information. Please try again or contact support.
             </p>
             <div className="flex gap-3 justify-center">
-              <Button onClick={() => window.location.reload()}>
-                Retry
-              </Button>
-              <Link href="/login">
+              <Link href="/admin/profile">
+                <Button>
+                  Retry
+                </Button>
+              </Link>
+              <Link href="/signin">
                 <Button variant="secondary">
                   Go to Login
                 </Button>

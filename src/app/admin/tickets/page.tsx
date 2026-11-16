@@ -24,7 +24,7 @@ async function getTickets() {
     
     const json = await res.json();
     return json; 
-  } catch (e) {
+  } catch {
     return { 
       tickets: [], 
       meta: { total: 0, page: 1, limit: 50, totalPages: 0 } 

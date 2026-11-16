@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api-client';
 import { formatCurrency, getTimeRemaining } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Trophy, Calendar, Clock, AlertCircle, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Trophy, Calendar, Clock } from 'lucide-react';
 import { getImageUrl } from '@/lib/image-helper';
 
 // --- Types ---

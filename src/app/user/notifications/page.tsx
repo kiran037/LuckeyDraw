@@ -39,7 +39,7 @@ export default function NotificationsPage() {
         setNotifications(response.data?.notifications || []);
         setUnreadCount(response.data?.unreadCount || 0);
       }
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred');
     } finally {
       setLoading(false);

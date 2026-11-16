@@ -19,7 +19,7 @@ async function getProduct(id: string) {
     
     const json = await res.json();
     return json.product; 
-  } catch (e) {
+  } catch {
     return null;
   }
 }

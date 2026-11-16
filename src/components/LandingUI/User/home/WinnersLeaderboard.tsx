@@ -1,5 +1,6 @@
 
 
+import Link from 'next/link';
 import { Trophy, Crown } from 'lucide-react';
 import { formatDate, cn } from '@/lib/utils';
 import { getImageUrl } from '@/lib/image-helper';
@@ -154,9 +155,12 @@ export default function WinnersLeaderboard({ winners = [] }: { winners?: Winner[
             </div>
           ))}
           
-          <button className="w-full py-3 text-center text-xs font-bold text-muted-foreground hover:text-foreground transition-colors hover:bg-accent/50">
+          <Link
+            href="/user/winners"
+            className="w-full py-3 text-center text-xs font-bold text-muted-foreground hover:text-foreground transition-colors hover:bg-accent/50 block"
+          >
             View All Winners
-          </button>
+          </Link>
         </div>
       )}
     </div>

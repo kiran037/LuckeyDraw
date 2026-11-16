@@ -1,8 +1,8 @@
+import { randomInt } from "crypto";
 import { eq, and, inArray } from "drizzle-orm";
 import {
   db,
   draw,
-  drawproduct,
   ticket,
   winner,
   notification,
@@ -29,6 +29,21 @@ export async function generateDrawWinners(drawId: string, adminId: string) {
       throw new Error("Winners have already been declared for this draw.");
     }
 
+    if (foundDraw.status === "DRAFT") {
+      throw new Error("Cannot declare winners for a draft draw.");
+    }
+
+    if (new Date() < new Date(foundDraw.endTime) && foundDraw.status !== "CLOSED") {
+      throw new Error("Draw is still active. Winners can only be declared after the draw has ended or been closed.");
+    }
+
+    const existingWinners = await tx.query.winner.findFirst({
+      where: eq(winner.drawId, dId),
+    });
+    if (existingWinners) {
+      throw new Error("Winners have already been recorded for this draw.");
+    }
+
     if (!foundDraw.drawproduct || foundDraw.drawproduct.length === 0) {
       throw new Error("No prizes/products defined for this draw.");
     }
@@ -46,10 +61,10 @@ export async function generateDrawWinners(drawId: string, adminId: string) {
       throw new Error("No eligible tickets found to pick winners from.");
     }
 
-    // 3. Shuffle
+    // 3. Cryptographically Secure Fisher-Yates Shuffle
     const shuffledTickets = [...eligibleTickets];
     for (let i = shuffledTickets.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = randomInt(i + 1);
       [shuffledTickets[i], shuffledTickets[j]] = [
         shuffledTickets[j],
         shuffledTickets[i],

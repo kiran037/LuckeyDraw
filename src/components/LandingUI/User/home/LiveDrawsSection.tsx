@@ -74,7 +74,7 @@ export default function LiveDrawsSection({ draws = [] }: LiveDrawsSectionProps) 
         
         <div className="mb-6">
            <Link
-            href="/user/draws?status=LIVE"
+            href="/user/draws?tab=live"
             className="group flex items-center gap-1 text-xs font-bold bg-white dark:bg-[#151925] border border-gray-200 dark:border-white/10 px-4 py-2 rounded-full hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-gray-900 dark:text-white"
           >
             View All

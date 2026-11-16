@@ -29,7 +29,7 @@ export async function GET() {
     const safeData = referrals.map((u) => ({
       id: u.id.toString(),
       name: u.name,
-      mobile: u.mobile,
+      mobile: u.mobile ? u.mobile.replace(/.(?=.{4})/g, "*") : "—",
       joinedAt: u.createdAt,
     }));
 

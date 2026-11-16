@@ -1,7 +1,7 @@
 "use client";
 
 import { 
-  Users, CreditCard, Ticket, Trophy, ArrowUpRight, AlertCircle 
+  Users, CreditCard, Ticket, ArrowUpRight, AlertCircle 
 } from "lucide-react";
 import { Card } from "@/components/AdminUI/ui/Card";
 

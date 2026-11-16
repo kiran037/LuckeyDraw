@@ -9,7 +9,6 @@ import {
   Save,
   X,
   Plus,
-  Search,
   Loader2,
   Trophy,
   Lock,
@@ -76,7 +75,6 @@ export default function DrawForm({ initialData }: { initialData?: DrawData }) {
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [availableProducts, setAvailableProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searching, setSearching] = useState(false);
 
   // --- LOGIC: CHECK IF LOCKED ---
   // If result is declared, the form becomes Read-Only
@@ -149,7 +147,6 @@ export default function DrawForm({ initialData }: { initialData?: DrawData }) {
     if (!isProductModalOpen) return;
     // ... (Your existing search debounce logic remains exactly the same)
     const fetchProducts = async () => {
-      setSearching(true);
       try {
         const res = await fetch(
           `/api/admin/products?search=${encodeURIComponent(searchQuery)}`
@@ -160,8 +157,6 @@ export default function DrawForm({ initialData }: { initialData?: DrawData }) {
         }
       } catch (err) {
         console.error("Failed to fetch products:", err);
-      } finally {
-        setSearching(false);
       }
     };
 
@@ -224,11 +219,6 @@ export default function DrawForm({ initialData }: { initialData?: DrawData }) {
   };
 
   const isEditMode = !!initialData?.id;
-  const hasTicketsSold = !!(
-    initialData?.status &&
-    initialData.status !== "DRAFT" &&
-    initialData.status !== "CANCELLED"
-  );
 
   // Determine if we should show the "Declare Winner" button
   // Only show if ID exists, Status is not draft/cancelled/live (must be ended/closed), and not already declared
@@ -379,6 +369,7 @@ export default function DrawForm({ initialData }: { initialData?: DrawData }) {
                         {p.image ? (
                           <img
                             src={p.image}
+                            alt={p.name}
                             className="w-full h-full object-cover"
                           />
                         ) : null}

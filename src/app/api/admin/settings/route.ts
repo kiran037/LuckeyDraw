@@ -4,7 +4,7 @@ import { db, referralConfig } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const admin = await requireAdmin();
     if (!admin) return errorResponse("Unauthorized", 401);
@@ -15,8 +15,8 @@ export async function GET(req: NextRequest) {
       data: config,
     });
   } catch (err) {
-    console.error("REPORT WINNERS ERROR:", err);
-    return errorResponse("Failed to generate winners report", 500);
+    console.error("ADMIN GET SETTINGS ERROR:", err);
+    return errorResponse("Failed to fetch settings", 500);
   }
 }
 
@@ -55,6 +55,8 @@ export async function POST(request: NextRequest) {
 
     return jsonResponse({
       message: "Setting updated successfully",
+      setting: updatedSetting,
+      data: updatedSetting,
       user: updatedSetting,
     });
   } catch (error) {

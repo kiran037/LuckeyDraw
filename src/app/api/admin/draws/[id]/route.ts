@@ -6,7 +6,6 @@ import {
   drawproduct,
   ticket,
   draw_status,
-  Draw,
 } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";

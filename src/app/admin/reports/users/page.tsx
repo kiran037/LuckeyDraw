@@ -21,7 +21,7 @@ async function getUsersReport() {
     if (!res.ok) return { data: [], meta: { total: 0, page: 1, limit: 50, totalPages: 0 } };
 
     return await res.json();
-  } catch (e) {
+  } catch {
     return { data: [], meta: { total: 0, page: 1, limit: 50, totalPages: 0 } };
   }
 }

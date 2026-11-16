@@ -1,6 +1,16 @@
 import { NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
-import { db, ticket, ticket_status } from "@/db";
+import { eq, sql } from "drizzle-orm";
+import {
+  db,
+  ticket,
+  user,
+  walletTransaction,
+  notification,
+  auditlog,
+  ticket_status,
+  wallet_transaction_type,
+  wallet_transaction_source,
+} from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
 
@@ -65,7 +75,15 @@ export async function PUT(
 
     const existingTicket = await db.query.ticket.findFirst({
       where: eq(ticket.id, BigInt(id)),
-      columns: { id: true, isWinner: true },
+      columns: {
+        id: true,
+        isWinner: true,
+        status: true,
+        userId: true,
+        drawId: true,
+        pricePaid: true,
+        ticketCode: true,
+      },
     });
 
     if (!existingTicket) return errorResponse("Ticket not found", 404);
@@ -81,15 +99,72 @@ export async function PUT(
       );
     }
 
-    const [updatedTicket] = await db
-      .update(ticket)
-      .set({ status: newStatus })
-      .where(eq(ticket.id, BigInt(id)))
-      .returning();
+    if (existingTicket.status === newStatus) {
+      return jsonResponse({
+        success: true,
+        message: `Ticket is already ${newStatus}`,
+        ticket: existingTicket,
+      });
+    }
+
+    const updatedTicket = await db.transaction(async (tx) => {
+      const [t] = await tx
+        .update(ticket)
+        .set({ status: newStatus })
+        .where(eq(ticket.id, BigInt(id)))
+        .returning();
+
+      if (
+        newStatus === ticket_status.REFUNDED &&
+        existingTicket.status !== ticket_status.REFUNDED
+      ) {
+        const [updatedUser] = await tx
+          .update(user)
+          .set({
+            wallet: sql`${user.wallet} + ${existingTicket.pricePaid}`,
+          })
+          .where(eq(user.id, existingTicket.userId))
+          .returning({ wallet: user.wallet });
+
+        const newBalance =
+          updatedUser?.wallet ?? existingTicket.pricePaid;
+
+        await tx.insert(walletTransaction).values({
+          userId: existingTicket.userId,
+          amount: existingTicket.pricePaid,
+          balanceAfter: newBalance,
+          type: wallet_transaction_type.CREDIT,
+          source: wallet_transaction_source.REFUND,
+          referenceId: existingTicket.id,
+          remark: `Refund for ticket ${existingTicket.ticketCode}`,
+        });
+
+        await tx.insert(notification).values({
+          userId: existingTicket.userId,
+          title: "Ticket Refunded 💳",
+          message: `Your ticket ${existingTicket.ticketCode} was refunded. ₹${existingTicket.pricePaid} has been credited to your wallet.`,
+        });
+      }
+
+      await tx.insert(auditlog).values({
+        action: `TICKET_${newStatus}`,
+        entity: "TICKET",
+        entityId: existingTicket.id,
+        adminId: BigInt(admin.id),
+        meta: JSON.stringify({
+          previousStatus: existingTicket.status,
+          newStatus,
+          pricePaid: existingTicket.pricePaid,
+          refunded: newStatus === ticket_status.REFUNDED,
+        }),
+      });
+
+      return t;
+    });
 
     return jsonResponse({
       success: true,
-      message: "Ticket status updated",
+      message: `Ticket status updated to ${newStatus}`,
       ticket: updatedTicket,
     });
   } catch (err) {

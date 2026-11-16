@@ -5,6 +5,8 @@ import {
   ticket,
   draw,
   user,
+  auditlog,
+  notification,
   ticket_status,
   ticket_source,
 } from "@/db";
@@ -157,7 +159,31 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    await db.insert(ticket).values(ticketsData);
+    await db.transaction(async (tx) => {
+      await tx.insert(ticket).values(ticketsData);
+
+      await tx.insert(notification).values({
+        userId: BigInt(body.userId),
+        title: "Tickets Issued 🎟️",
+        message: `${ticketCount} ticket(s) have been manually issued to your account for "${foundDraw.title}".`,
+      });
+
+      await tx.insert(auditlog).values({
+        action: "ADMIN_MANUAL_TICKETS",
+        entity: "TICKET",
+        entityId: foundDraw.id,
+        adminId: BigInt(admin.id),
+        meta: JSON.stringify({
+          drawId: foundDraw.id.toString(),
+          userId: body.userId,
+          ticketCount,
+          pricePaid:
+            body.pricePaid !== undefined
+              ? Number(body.pricePaid)
+              : foundDraw.entryFee,
+        }),
+      });
+    });
 
     return jsonResponse({
       success: true,

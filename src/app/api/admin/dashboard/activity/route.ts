@@ -1,10 +1,9 @@
-import { NextRequest } from "next/server";
 import { desc } from "drizzle-orm";
 import { db, user, payment, auditlog } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const admin = await requireAdmin();
     if (!admin) return errorResponse("Unauthorized", 401);

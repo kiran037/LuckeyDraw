@@ -346,7 +346,7 @@ export const ticket = pgTable(
       "btree",
       table.drawId.asc().nullsLast().op("int8_ops")
     ),
-    uniqueIndex("ticket_paymentId_key").using(
+    index("ticket_paymentId_idx").using(
       "btree",
       table.paymentId.asc().nullsLast().op("int8_ops")
     ),

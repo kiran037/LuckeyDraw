@@ -26,7 +26,7 @@ async function getSalesReport() {
     };
     
     return await res.json();
-  } catch (e) {
+  } catch {
     return { 
       summary: { totalRevenue: 0, totalTransactions: 0 },
       data: [], 

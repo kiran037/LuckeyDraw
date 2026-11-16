@@ -10,8 +10,6 @@ import {
   AlertCircle,
   Loader2,
   CreditCard,
-  UploadCloud,
-  Wallet,
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
@@ -238,7 +236,7 @@ export default function BuyTicketPage() {
         {finalPayable > 0 && (
           <div className="bg-white rounded-3xl p-6 text-center mb-6">
             <CreditCard className="mx-auto mb-3 text-purple-600" />
-            <img src={ADMIN_QR_CODE} className="w-40 h-40 mx-auto mb-3" />
+            <img src={ADMIN_QR_CODE} alt="Payment UPI QR Code" className="w-40 h-40 mx-auto mb-3" />
             <p className="text-xs text-gray-500">Scan & Pay</p>
           </div>
         )}

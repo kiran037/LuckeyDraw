@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { count, eq, lte, gte, ne, and, asc, desc } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
-import { db, draw, winner, ticket, drawproduct, draw_status } from "@/db";
+import { db, draw, winner, ticket, draw_status } from "@/db";
 
 type UserTicketData = {
   id: string;

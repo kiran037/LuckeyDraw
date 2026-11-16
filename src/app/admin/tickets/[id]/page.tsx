@@ -19,7 +19,7 @@ async function getTicket(id: string) {
     
     const json = await res.json();
     return json.ticket; 
-  } catch (e) {
+  } catch {
     return null;
   }
 }

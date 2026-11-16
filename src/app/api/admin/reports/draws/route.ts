@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { count, eq, ilike, and, desc, SQL } from "drizzle-orm";
-import { db, draw, payment, ticket, winner, draw_status } from "@/db";
+import { db, draw, payment, draw_status } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
 

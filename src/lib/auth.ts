@@ -24,6 +24,17 @@ export interface AuthUser {
 
 /* -------------------- Core Auth -------------------- */
 
+const getJwtSecret = (): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("JWT_SECRET environment variable is missing");
+    }
+    return "dev-fallback-secret-key-luckeydraw-2026";
+  }
+  return secret;
+};
+
 export async function getCurrentUser(): Promise<AuthUser | null> {
   try {
     const cookieStore = await cookies();
@@ -33,7 +44,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET as string
+      getJwtSecret()
     ) as AppJwtPayload;
 
     if (!decoded?.userId) return null;
@@ -87,7 +98,7 @@ export async function requireUser(): Promise<AuthUser | null> {
 export function generateToken(userId: string, role: user_role): string {
   return jwt.sign(
     { userId, role },
-    process.env.JWT_SECRET as string,
+    getJwtSecret(),
     { expiresIn: "7d" }
   );
 }
