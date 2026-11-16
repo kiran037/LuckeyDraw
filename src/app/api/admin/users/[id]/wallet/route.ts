@@ -1,10 +1,13 @@
-import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth";
-import { jsonResponse, errorResponse } from "@/lib/api-utils";
+import { eq } from "drizzle-orm";
 import {
+  db,
+  user,
+  walletTransaction,
   wallet_transaction_type,
   wallet_transaction_source,
-} from "@/generated/client/client";
+} from "@/db";
+import { requireAdmin } from "@/lib/auth";
+import { jsonResponse, errorResponse } from "@/lib/api-utils";
 
 export async function POST(
   req: Request,
@@ -19,7 +22,7 @@ export async function POST(
 
     const { amount, type, source, remark } = await req.json();
 
-    // ✅ validations
+    // validations
     if (!amount || amount <= 0) {
       return errorResponse("Invalid amount", 400);
     }
@@ -32,38 +35,35 @@ export async function POST(
       return errorResponse("Invalid transaction source", 400);
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
+    const foundUser = await db.query.user.findFirst({
+      where: eq(user.id, userId),
     });
 
-    if (!user) return errorResponse("User not found", 404);
+    if (!foundUser) return errorResponse("User not found", 404);
 
-    // ❌ Debit me balance check
-    if (type === "DEBIT" && user.wallet < amount) {
+    if (type === "DEBIT" && foundUser.wallet < amount) {
       return errorResponse("Insufficient wallet balance", 400);
     }
 
     const newBalance =
       type === "CREDIT"
-        ? user.wallet + amount
-        : user.wallet - amount;
+        ? foundUser.wallet + amount
+        : foundUser.wallet - amount;
 
-    // ✅ update wallet
-    await prisma.user.update({
-      where: { id: userId },
-      data: { wallet: newBalance },
-    });
+    await db.transaction(async (tx) => {
+      await tx
+        .update(user)
+        .set({ wallet: newBalance })
+        .where(eq(user.id, userId));
 
-    // ✅ transaction log
-    await prisma.walletTransaction.create({
-      data: {
+      await tx.insert(walletTransaction).values({
         userId,
         amount,
         balanceAfter: newBalance,
         type,
         source,
         remark: remark || "Admin wallet adjustment",
-      },
+      });
     });
 
     return jsonResponse({

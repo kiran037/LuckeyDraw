@@ -1,9 +1,8 @@
-///Users/xeoren/Desktop/lucky_draw/src/app/api/admin/reports/draws/route.ts
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { count, eq, ilike, and, desc, SQL } from "drizzle-orm";
+import { db, draw, payment, ticket, winner, draw_status } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
-import { draw_status, Prisma } from "@/generated/client/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,48 +15,35 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status") as draw_status | undefined;
     const search = searchParams.get("search");
 
-    const where: Prisma.drawWhereInput = {};
+    const conditions: SQL[] = [];
+    if (status) conditions.push(eq(draw.status, status));
+    if (search) conditions.push(ilike(draw.title, `%${search}%`));
 
-    if (status) where.status = status;
-    if (search) where.title = { contains: search };
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    // Get Data
-    const [total, draws] = await prisma.$transaction([
-      prisma.draw.count({ where }),
-      prisma.draw.findMany({
-        where,
-        take: limit,
-        skip: (page - 1) * limit,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          title: true,
-          entryFee: true,
-          status: true,
-          startTime: true,
-          endTime: true,
-          maxTickets: true,
-          _count: {
-            select: {
-              ticket: true,
-              payment: true, 
-              winner: true
-            },
+    const [totalRes, drawsList] = await Promise.all([
+      db.select({ count: count() }).from(draw).where(whereClause),
+      db.query.draw.findMany({
+        where: whereClause,
+        limit,
+        offset: (page - 1) * limit,
+        orderBy: [desc(draw.createdAt)],
+        with: {
+          tickets: { columns: { id: true } },
+          winners: { columns: { id: true } },
+          payments: {
+            where: eq(payment.status, "APPROVED"),
+            columns: { amount: true },
           },
-          // Fetch only approved payments to calculate revenue in JS (lighter than subquery)
-          payment: {
-            where: { status: "APPROVED" },
-            select: { amount: true }
-          }
         },
       }),
     ]);
 
-    // Format Data
-    const report = draws.map(d => {
-      // Calculate revenue from approved payments
-      const revenue = d.payment.reduce((sum, p) => sum + p.amount, 0);
-      const sold = d._count.ticket;
+    const total = Number(totalRes[0]?.count ?? 0);
+
+    const report = drawsList.map((d) => {
+      const revenue = (d.payments || []).reduce((sum, p) => sum + p.amount, 0);
+      const sold = (d.tickets || []).length;
       const progress = d.maxTickets > 0 ? (sold / d.maxTickets) * 100 : 0;
 
       return {
@@ -67,15 +53,15 @@ export async function GET(req: NextRequest) {
         entryFee: d.entryFee,
         dates: {
           start: d.startTime,
-          end: d.endTime
+          end: d.endTime,
         },
         stats: {
           totalTickets: d.maxTickets,
           soldTickets: sold,
           progress: Math.round(progress),
           totalRevenue: revenue,
-          winnersDeclared: d._count.winner
-        }
+          winnersDeclared: (d.winners || []).length,
+        },
       };
     });
 
@@ -83,7 +69,6 @@ export async function GET(req: NextRequest) {
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
       data: report,
     });
-
   } catch (err) {
     console.error("REPORT DRAWS ERROR:", err);
     return errorResponse("Failed to generate draw report", 500);

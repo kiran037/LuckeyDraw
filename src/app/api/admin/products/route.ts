@@ -1,9 +1,8 @@
-///Users/xeoren/Desktop/lucky_draw/src/app/api/admin/products/route.ts
 import { NextRequest } from "next/server";
+import { count, eq, or, ilike, and, desc, asc, SQL } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db, draw, drawproduct, auditlog } from "@/db";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
-import { Prisma } from "@/generated/client/client";
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,49 +17,60 @@ export async function GET(request: NextRequest) {
     const sortBy = searchParams.get("sortBy") || "createdAt";
     const order = searchParams.get("order") === "asc" ? "asc" : "desc";
 
-    // Build Query
-    const where: Prisma.drawproductWhereInput = {};
+    const conditions: SQL[] = [];
 
     if (drawId) {
-      where.drawId = BigInt(drawId);
+      conditions.push(eq(drawproduct.drawId, BigInt(drawId)));
     }
 
     if (search) {
-      where.OR = [
-        { name: { contains: search } },
-        { description: { contains: search } },
-      ];
+      conditions.push(
+        or(
+          ilike(drawproduct.name, `%${search}%`),
+          ilike(drawproduct.description, `%${search}%`)
+        )!
+      );
     }
 
-    // Sort Validation
-    const allowedSorts = ["createdAt", "name", "quantity"];
-    const validSort = allowedSorts.includes(sortBy) ? sortBy : "createdAt";
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    // Transaction
-    const [total, products] = await prisma.$transaction([
-      prisma.drawproduct.count({ where }),
-      prisma.drawproduct.findMany({
-        where,
-        take: limit,
-        skip: (page - 1) * limit,
-        orderBy: { [validSort]: order },
-        include: {
+    let orderByClause = desc(drawproduct.createdAt);
+    if (sortBy === "name") {
+      orderByClause = order === "asc" ? asc(drawproduct.name) : desc(drawproduct.name);
+    } else if (sortBy === "quantity") {
+      orderByClause = order === "asc" ? asc(drawproduct.quantity) : desc(drawproduct.quantity);
+    } else {
+      orderByClause = order === "asc" ? asc(drawproduct.createdAt) : desc(drawproduct.createdAt);
+    }
+
+    const [totalRes, productsList] = await Promise.all([
+      db.select({ count: count() }).from(drawproduct).where(whereClause),
+      db.query.drawproduct.findMany({
+        where: whereClause,
+        limit,
+        offset: (page - 1) * limit,
+        orderBy: [orderByClause],
+        with: {
           draw: {
-            select: { id: true, title: true, status: true },
+            columns: { id: true, title: true, status: true },
           },
-          _count: {
-            select: { winner: true }
-          }
+          winners: {
+            columns: { id: true },
+          },
         },
       }),
     ]);
 
-    // Format (add calculated fields)
-    const formattedProducts = products.map((p) => ({
-      ...p,
-      winnersCount: p._count.winner,
-      remainingQuantity: p.quantity - p._count.winner,
-    }));
+    const total = Number(totalRes[0]?.count ?? 0);
+
+    const formattedProducts = productsList.map((p) => {
+      const winnersCount = (p.winners || []).length;
+      return {
+        ...p,
+        winnersCount,
+        remainingQuantity: p.quantity - winnersCount,
+      };
+    });
 
     return jsonResponse({
       meta: {
@@ -71,7 +81,6 @@ export async function GET(request: NextRequest) {
       },
       products: formattedProducts,
     });
-
   } catch (error) {
     console.error("ADMIN GET PRODUCTS ERROR:", error);
     return errorResponse("Failed to fetch products", 500);
@@ -86,47 +95,50 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { drawId, name, image, quantity, description } = body;
 
-    // Validation
-    if (!drawId || !name || quantity === undefined) return errorResponse("Missing required fields", 400);
-    if (Number(quantity) < 1) return errorResponse("Quantity must be at least 1", 400);
+    if (!drawId || !name || quantity === undefined)
+      return errorResponse("Missing required fields", 400);
+    if (Number(quantity) < 1)
+      return errorResponse("Quantity must be at least 1", 400);
 
-    // Check Draw
-    const draw = await prisma.draw.findUnique({
-      where: { id: BigInt(drawId) },
+    const foundDraw = await db.query.draw.findFirst({
+      where: eq(draw.id, BigInt(drawId)),
     });
-    if (!draw) return errorResponse("Draw not found", 404);
+    if (!foundDraw) return errorResponse("Draw not found", 404);
 
-    // Create
-    const product = await prisma.drawproduct.create({
-      data: {
+    const [createdProduct] = await db
+      .insert(drawproduct)
+      .values({
         drawId: BigInt(drawId),
         name: name.trim(),
         image: image || null,
         quantity: Number(quantity),
         description: description?.trim() || null,
-      },
-      include: {
-        draw: { select: { id: true, title: true, status: true } }
-      }
+      })
+      .returning();
+
+    await db.insert(auditlog).values({
+      action: "CREATE",
+      entity: "DRAW_PRODUCT",
+      entityId: createdProduct.id,
+      adminId: BigInt(admin.id),
+      meta: JSON.stringify({ drawId, name, quantity }),
     });
 
-    // Audit Log
-    await prisma.auditlog.create({
-      data: {
-        action: "CREATE",
-        entity: "DRAW_PRODUCT",
-        entityId: product.id,
-        adminId: BigInt(admin.id),
-        meta: JSON.stringify({ drawId, name, quantity }),
+    const productWithDraw = await db.query.drawproduct.findFirst({
+      where: eq(drawproduct.id, createdProduct.id),
+      with: {
+        draw: { columns: { id: true, title: true, status: true } },
       },
     });
 
-    return jsonResponse({
-      success: true,
-      message: "Product created successfully",
-      product,
-    }, 201);
-
+    return jsonResponse(
+      {
+        success: true,
+        message: "Product created successfully",
+        product: productWithDraw,
+      },
+      201
+    );
   } catch (error) {
     console.error("ADMIN CREATE PRODUCT ERROR:", error);
     return errorResponse("Failed to create product", 500);

@@ -1,10 +1,9 @@
 import { NextRequest } from "next/server";
+import { eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db, drawproduct, auditlog } from "@/db";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
-import { Prisma } from "@/generated/client/client";
 
-// Helper type for params
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(req: NextRequest, context: Context) {
@@ -14,11 +13,11 @@ export async function GET(req: NextRequest, context: Context) {
 
     const { id } = await context.params;
 
-    const product = await prisma.drawproduct.findUnique({
-      where: { id: BigInt(id) },
-      include: {
+    const product = await db.query.drawproduct.findFirst({
+      where: eq(drawproduct.id, BigInt(id)),
+      with: {
         draw: {
-          select: {
+          columns: {
             id: true,
             title: true,
             description: true,
@@ -28,19 +27,19 @@ export async function GET(req: NextRequest, context: Context) {
             entryFee: true,
           },
         },
-        winner: {
-          include: {
+        winners: {
+          with: {
             ticket: {
-              select: {
-                ticketCode: true,
+              columns: { ticketCode: true },
+              with: {
                 user: {
-                  select: { id: true, name: true, email: true, mobile: true },
+                  columns: { id: true, name: true, email: true, mobile: true },
                 },
               },
             },
-            admin: { // Fetch who declared the winner
-               select: { id: true, name: true }
-            }
+            admin: {
+              columns: { id: true, name: true },
+            },
           },
         },
       },
@@ -48,17 +47,14 @@ export async function GET(req: NextRequest, context: Context) {
 
     if (!product) return errorResponse("Product not found", 404);
 
-    // Format response with calculated fields
     const formattedData = {
       ...product,
-      winnersCount: product.winner.length,
-      remainingQuantity: product.quantity - product.winner.length,
-      // Simplify winner structure for frontend if needed, 
-      // but standard jsonResponse handles BigInt automatically.
+      winner: product.winners,
+      winnersCount: (product.winners || []).length,
+      remainingQuantity: product.quantity - (product.winners || []).length,
     };
 
     return jsonResponse({ product: formattedData });
-
   } catch (error) {
     console.error("ADMIN GET PRODUCT ERROR:", error);
     return errorResponse("Failed to fetch product", 500);
@@ -71,54 +67,58 @@ export async function PATCH(req: NextRequest, context: Context) {
     if (!admin) return errorResponse("Unauthorized", 401);
 
     const { id } = await context.params;
-    const body = await requestJson(req); // or await req.json()
+    const body = await requestJson(req);
     const { name, image, quantity, description } = body;
 
-    // Check existence
-    const existing = await prisma.drawproduct.findUnique({
-      where: { id: BigInt(id) },
-      include: { winner: true },
+    const existing = await db.query.drawproduct.findFirst({
+      where: eq(drawproduct.id, BigInt(id)),
+      with: { winners: { columns: { id: true } } },
     });
 
     if (!existing) return errorResponse("Product not found", 404);
 
-    // Validate Quantity
+    const winnerCount = (existing.winners || []).length;
     if (quantity !== undefined) {
       const newQty = Number(quantity);
-      if (newQty < existing.winner.length) {
-        return errorResponse(`Cannot reduce quantity below current winner count (${existing.winner.length})`, 400);
+      if (newQty < winnerCount) {
+        return errorResponse(
+          `Cannot reduce quantity below current winner count (${winnerCount})`,
+          400
+        );
       }
     }
 
-    const updateData: Prisma.drawproductUpdateInput = {};
+    const updateData: Partial<typeof drawproduct.$inferInsert> = {};
     if (name) updateData.name = name.trim();
     if (image !== undefined) updateData.image = image;
     if (quantity !== undefined) updateData.quantity = Number(quantity);
-    if (description !== undefined) updateData.description = description ? description.trim() : null;
+    if (description !== undefined)
+      updateData.description = description ? description.trim() : null;
 
-    const updatedProduct = await prisma.drawproduct.update({
-      where: { id: BigInt(id) },
-      data: updateData,
-      include: { draw: true }
+    const [updatedProduct] = await db
+      .update(drawproduct)
+      .set(updateData)
+      .where(eq(drawproduct.id, BigInt(id)))
+      .returning();
+
+    await db.insert(auditlog).values({
+      action: "UPDATE",
+      entity: "DRAW_PRODUCT",
+      entityId: updatedProduct.id,
+      adminId: BigInt(admin.id),
+      meta: JSON.stringify(updateData),
     });
 
-    // Audit
-    await prisma.auditlog.create({
-      data: {
-        action: "UPDATE",
-        entity: "DRAW_PRODUCT",
-        entityId: updatedProduct.id,
-        adminId: BigInt(admin.id),
-        meta: JSON.stringify(updateData),
-      },
+    const productWithDraw = await db.query.drawproduct.findFirst({
+      where: eq(drawproduct.id, updatedProduct.id),
+      with: { draw: true },
     });
 
     return jsonResponse({
       success: true,
       message: "Product updated",
-      product: updatedProduct
+      product: productWithDraw,
     });
-
   } catch (error) {
     console.error("ADMIN UPDATE PRODUCT ERROR:", error);
     return errorResponse("Failed to update product", 500);
@@ -132,44 +132,47 @@ export async function DELETE(req: NextRequest, context: Context) {
 
     const { id } = await context.params;
 
-    const product = await prisma.drawproduct.findUnique({
-      where: { id: BigInt(id) },
-      include: { _count: { select: { winner: true } } }
+    const product = await db.query.drawproduct.findFirst({
+      where: eq(drawproduct.id, BigInt(id)),
+      with: { winners: { columns: { id: true } } },
     });
 
     if (!product) return errorResponse("Product not found", 404);
 
-    if (product._count.winner > 0) {
-      return errorResponse("Cannot delete product that has declared winners", 400);
+    if ((product.winners || []).length > 0) {
+      return errorResponse(
+        "Cannot delete product that has declared winners",
+        400
+      );
     }
 
-    await prisma.drawproduct.delete({
-      where: { id: BigInt(id) },
-    });
+    await db.delete(drawproduct).where(eq(drawproduct.id, BigInt(id)));
 
-    // Audit
-    await prisma.auditlog.create({
-      data: {
-        action: "DELETE",
-        entity: "DRAW_PRODUCT",
-        entityId: BigInt(id),
-        adminId: BigInt(admin.id),
-        meta: JSON.stringify({ name: product.name, drawId: product.drawId.toString() }),
-      },
+    await db.insert(auditlog).values({
+      action: "DELETE",
+      entity: "DRAW_PRODUCT",
+      entityId: BigInt(id),
+      adminId: BigInt(admin.id),
+      meta: JSON.stringify({
+        name: product.name,
+        drawId: product.drawId.toString(),
+      }),
     });
 
     return jsonResponse({
       success: true,
-      message: "Product deleted successfully"
+      message: "Product deleted successfully",
     });
-
   } catch (error) {
     console.error("ADMIN DELETE PRODUCT ERROR:", error);
     return errorResponse("Failed to delete product", 500);
   }
 }
 
-// Helper to safely parse JSON
 async function requestJson(req: NextRequest) {
-    try { return await req.json(); } catch { return {}; }
+  try {
+    return await req.json();
+  } catch {
+    return {};
+  }
 }

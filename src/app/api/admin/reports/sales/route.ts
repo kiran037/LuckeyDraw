@@ -1,9 +1,8 @@
-///Users/xeoren/Desktop/lucky_draw/src/app/api/admin/reports/sales/route.ts
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { count, sum, eq, gte, lte, and, desc, SQL } from "drizzle-orm";
+import { db, payment, payment_status } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
-import { payment_status, Prisma } from "@/generated/client/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,52 +12,56 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const limit = Math.max(1, parseInt(searchParams.get("limit") || "20"));
-    const from = searchParams.get("from"); // YYYY-MM-DD
-    const to = searchParams.get("to");     // YYYY-MM-DD
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
 
-    // Build Date Filter
-    const where: Prisma.paymentWhereInput = {
-      status: payment_status.APPROVED // Only count actual sales
-    };
+    const conditions: SQL[] = [eq(payment.status, payment_status.APPROVED)];
 
-    if (from || to) {
-      where.createdAt = {};
-      if (from) where.createdAt.gte = new Date(from);
-      if (to) where.createdAt.lte = new Date(new Date(to).setHours(23, 59, 59));
+    if (from) {
+      conditions.push(gte(payment.createdAt, new Date(from)));
+    }
+    if (to) {
+      conditions.push(lte(payment.createdAt, new Date(new Date(to).setHours(23, 59, 59, 999))));
     }
 
-    // 1. Aggregate Total Revenue (Database side is much faster)
-    const aggregation = await prisma.payment.aggregate({
-      where,
-      _sum: { amount: true },
-      _count: { id: true }
-    });
+    const whereClause = and(...conditions);
 
-    // 2. Fetch Paginated Records
-    const payments = await prisma.payment.findMany({
-      where,
-      take: limit,
-      skip: (page - 1) * limit,
-      orderBy: { createdAt: "desc" },
-      include: {
-        user: { select: { id: true, name: true, email: true } },
-        draw: { select: { id: true, title: true } }
-      }
-    });
+    const [aggRes, paymentsList] = await Promise.all([
+      db
+        .select({
+          totalRevenue: sum(payment.amount),
+          totalTransactions: count(),
+        })
+        .from(payment)
+        .where(whereClause),
+
+      db.query.payment.findMany({
+        where: whereClause,
+        limit,
+        offset: (page - 1) * limit,
+        orderBy: [desc(payment.createdAt)],
+        with: {
+          user: { columns: { id: true, name: true, email: true } },
+          draw: { columns: { id: true, title: true } },
+        },
+      }),
+    ]);
+
+    const totalRevenue = Number(aggRes[0]?.totalRevenue ?? 0);
+    const totalTransactions = Number(aggRes[0]?.totalTransactions ?? 0);
 
     return jsonResponse({
       summary: {
-        totalRevenue: aggregation._sum.amount || 0,
-        totalTransactions: aggregation._count.id || 0,
+        totalRevenue,
+        totalTransactions,
       },
       meta: {
         page,
         limit,
-        totalPages: Math.ceil((aggregation._count.id || 0) / limit),
+        totalPages: Math.ceil(totalTransactions / limit),
       },
-      data: payments,
+      data: paymentsList,
     });
-
   } catch (err) {
     console.error("REPORT SALES ERROR:", err);
     return errorResponse("Failed to generate sales report", 500);

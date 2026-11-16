@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { asc, gte, eq, and } from "drizzle-orm";
+import { db, payment, payment_status } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
-import { payment_status } from "@/generated/client/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,32 +14,32 @@ export async function GET(req: NextRequest) {
     daysAgo.setDate(daysAgo.getDate() - 7);
 
     // Fetch raw data
-    const payments = await prisma.payment.findMany({
-      where: {
-        status: payment_status.APPROVED,
-        createdAt: { gte: daysAgo },
-      },
-      select: {
+    const payments = await db.query.payment.findMany({
+      where: and(
+        eq(payment.status, payment_status.APPROVED),
+        gte(payment.createdAt, daysAgo)
+      ),
+      columns: {
         amount: true,
         createdAt: true,
       },
-      orderBy: { createdAt: "asc" }
+      orderBy: [asc(payment.createdAt)],
     });
 
     // Group by Date (YYYY-MM-DD)
     const revenueMap = new Map<string, number>();
-    
+
     // Initialize last 7 days with 0
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const key = d.toISOString().split('T')[0]; // "2023-10-25"
+      const key = d.toISOString().split("T")[0];
       revenueMap.set(key, 0);
     }
 
     // Fill Data
-    payments.forEach(p => {
-      const key = p.createdAt.toISOString().split('T')[0];
+    payments.forEach((p) => {
+      const key = new Date(p.createdAt).toISOString().split("T")[0];
       if (revenueMap.has(key)) {
         revenueMap.set(key, (revenueMap.get(key) || 0) + p.amount);
       }
@@ -48,15 +48,14 @@ export async function GET(req: NextRequest) {
     // Convert to Array for Recharts/Chart.js
     const chartData = Array.from(revenueMap.entries()).map(([date, amount]) => ({
       date,
-      amount
+      amount,
     }));
 
     return jsonResponse({
       charts: {
-        revenueOverTime: chartData
-      }
+        revenueOverTime: chartData,
+      },
     });
-
   } catch (err) {
     console.error("ADMIN DASHBOARD ANALYTICS ERROR:", err);
     return errorResponse("Failed to load analytics", 500);

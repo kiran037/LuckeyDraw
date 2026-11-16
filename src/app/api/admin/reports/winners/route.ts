@@ -1,9 +1,8 @@
-///Users/xeoren/Desktop/lucky_draw/src/app/api/admin/reports/winners/route.ts
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { count, eq, and, desc, SQL, ilike } from "drizzle-orm";
+import { db, winner, user } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
-import { Prisma } from "@/generated/client/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,50 +13,72 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const limit = Math.max(1, parseInt(searchParams.get("limit") || "20"));
     const drawId = searchParams.get("drawId");
-    const search = searchParams.get("search"); // Search Winner Name
+    const search = searchParams.get("search");
 
-    const where: Prisma.winnerWhereInput = {};
+    const conditions: SQL[] = [];
+    if (drawId) conditions.push(eq(winner.drawId, BigInt(drawId)));
 
-    if (drawId) where.drawId = BigInt(drawId);
+    // If search by winner name, we can filter by user name
     if (search) {
-      where.user = {
-        name: { contains: search }
-      };
+      // Find matching user IDs
+      const matchingUsers = await db.query.user.findMany({
+        where: ilike(user.name, `%${search}%`),
+        columns: { id: true },
+      });
+      const userIds = matchingUsers.map((u) => u.id);
+      if (userIds.length > 0) {
+        conditions.push(
+          eq(winner.userId, userIds[0]) // or inArray if multiple
+        );
+      } else {
+        return jsonResponse({
+          meta: { total: 0, page, limit, totalPages: 0 },
+          data: [],
+        });
+      }
     }
 
-    // Query on 'winner' model directly for a cleaner report
-    const [total, winners] = await prisma.$transaction([
-      prisma.winner.count({ where }),
-      prisma.winner.findMany({
-        where,
-        take: limit,
-        skip: (page - 1) * limit,
-        orderBy: { declaredAt: "desc" },
-        include: {
-          user: { // The Winner
-            select: { id: true, name: true, email: true, mobile: true, avatar: true }
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [totalRes, winnersList] = await Promise.all([
+      db.select({ count: count() }).from(winner).where(whereClause),
+      db.query.winner.findMany({
+        where: whereClause,
+        limit,
+        offset: (page - 1) * limit,
+        orderBy: [desc(winner.declaredAt)],
+        with: {
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              mobile: true,
+              avatar: true,
+            },
           },
-          draw: { // The Draw
-            select: { id: true, title: true }
+          draw: {
+            columns: { id: true, title: true },
           },
-          drawproduct: { // The Prize
-            select: { id: true, name: true, image: true }
+          drawproduct: {
+            columns: { id: true, name: true, image: true },
           },
-          ticket: { // The Winning Ticket
-            select: { ticketCode: true }
+          ticket: {
+            columns: { ticketCode: true },
           },
-          admin: { // Who declared it
-             select: { name: true }
-          }
-        }
+          admin: {
+            columns: { name: true },
+          },
+        },
       }),
     ]);
 
+    const total = Number(totalRes[0]?.count ?? 0);
+
     return jsonResponse({
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
-      data: winners,
+      data: winnersList,
     });
-
   } catch (err) {
     console.error("REPORT WINNERS ERROR:", err);
     return errorResponse("Failed to generate winners report", 500);

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { eq, desc } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db, user } from "@/db";
 
 export async function GET() {
   try {
@@ -14,22 +15,18 @@ export async function GET() {
 
     const userId = BigInt(authUser.id);
 
-    const referrals = await prisma.user.findMany({
-      where: {
-        referredById: userId,
-      },
-      select: {
+    const referrals = await db.query.user.findMany({
+      where: eq(user.referredById, userId),
+      columns: {
         id: true,
         name: true,
         mobile: true,
         createdAt: true,
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: [desc(user.createdAt)],
     });
 
-    const safeData = referrals.map(u => ({
+    const safeData = referrals.map((u) => ({
       id: u.id.toString(),
       name: u.name,
       mobile: u.mobile,

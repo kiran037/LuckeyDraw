@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { eq, and, count } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db, user, notification } from "@/db";
 
 /* -------------------- Types -------------------- */
 
@@ -28,10 +29,10 @@ export async function GET() {
 
     const userId = BigInt(authUser.id);
 
-    const [dbUser, unreadCount] = await Promise.all([
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: {
+    const [dbUser, unreadCountResult] = await Promise.all([
+      db.query.user.findFirst({
+        where: eq(user.id, userId),
+        columns: {
           id: true,
           name: true,
           email: true,
@@ -43,12 +44,12 @@ export async function GET() {
           createdAt: true,
         },
       }),
-      prisma.notification.count({
-        where: {
-          userId,
-          isRead: false,
-        },
-      }),
+      db
+        .select({ count: count() })
+        .from(notification)
+        .where(
+          and(eq(notification.userId, userId), eq(notification.isRead, false))
+        ),
     ]);
 
     if (!dbUser) {
@@ -58,8 +59,7 @@ export async function GET() {
       );
     }
 
-    // 🔥 SAFE SERIALIZATION (NO BigInt issues)
-
+    const unreadCount = Number(unreadCountResult[0]?.count ?? 0);
 
     return NextResponse.json({
       success: true,
@@ -73,10 +73,9 @@ export async function GET() {
         wallet: dbUser.wallet,
         referralCode: dbUser.referralCode,
         createdAt: dbUser.createdAt,
-        unreadCount:unreadCount,
-      }
+        unreadCount,
+      },
     });
-
   } catch (error) {
     console.error("ME GET ERROR:", error);
     return NextResponse.json(
@@ -108,8 +107,8 @@ export async function PATCH(req: Request) {
 
     /* -------- Email -------- */
     if (body.email) {
-      const existing = await prisma.user.findUnique({
-        where: { email: body.email },
+      const existing = await db.query.user.findFirst({
+        where: eq(user.email, body.email),
       });
 
       if (existing && existing.id.toString() !== authUser.id) {
@@ -124,8 +123,8 @@ export async function PATCH(req: Request) {
 
     /* -------- Mobile -------- */
     if (body.mobile) {
-      const existing = await prisma.user.findUnique({
-        where: { mobile: body.mobile },
+      const existing = await db.query.user.findFirst({
+        where: eq(user.mobile, body.mobile),
       });
 
       if (existing && existing.id.toString() !== authUser.id) {
@@ -147,9 +146,9 @@ export async function PATCH(req: Request) {
         );
       }
 
-      const dbUser = await prisma.user.findUnique({
-        where: { id: BigInt(authUser.id) },
-        select: { password: true },
+      const dbUser = await db.query.user.findFirst({
+        where: eq(user.id, BigInt(authUser.id)),
+        columns: { password: true },
       });
 
       if (
@@ -166,19 +165,19 @@ export async function PATCH(req: Request) {
     }
 
     /* -------- Update -------- */
-    const updatedUser = await prisma.user.update({
-      where: { id: BigInt(authUser.id) },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        mobile: true,
-        role: true,
-        avatar: true,
-        createdAt: true,
-      },
-    });
+    const [updatedUser] = await db
+      .update(user)
+      .set(updateData)
+      .where(eq(user.id, BigInt(authUser.id)))
+      .returning({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        mobile: user.mobile,
+        role: user.role,
+        avatar: user.avatar,
+        createdAt: user.createdAt,
+      });
 
     return NextResponse.json({
       success: true,
@@ -188,7 +187,6 @@ export async function PATCH(req: Request) {
         id: updatedUser.id.toString(),
       },
     });
-
   } catch (error) {
     console.error("ME PATCH ERROR:", error);
     return NextResponse.json(

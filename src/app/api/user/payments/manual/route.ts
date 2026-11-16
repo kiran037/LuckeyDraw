@@ -1,22 +1,27 @@
-import { NextResponse } from "next/server";
+import { eq, and, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { jsonResponse, errorResponse } from "@/lib/api-utils";
 import {
+  db,
+  user,
+  draw,
+  payment,
+  ticket,
+  walletTransaction,
   payment_status,
   payment_method,
   payment_gateway,
   wallet_transaction_type,
   wallet_transaction_source,
-} from "@/generated/client/client";
+  ticket_status,
+  ticket_source,
+} from "@/db";
+import { jsonResponse, errorResponse } from "@/lib/api-utils";
 
 export async function POST(request: Request) {
   try {
-    /* =======================
-       1. AUTH
-    ======================= */
-    const user = await getCurrentUser();
-    if (!user) return errorResponse("Unauthorized", 401);
+    /* 1. AUTH */
+    const authUser = await getCurrentUser();
+    if (!authUser) return errorResponse("Unauthorized", 401);
 
     const body = await request.json();
     const {
@@ -31,36 +36,33 @@ export async function POST(request: Request) {
       return errorResponse("drawId is required", 400);
     }
 
-    const uId = BigInt(user.id);
+    const uId = BigInt(authUser.id);
     const dId = BigInt(drawId);
 
-    /* =======================
-       2. DRAW VALIDATION
-    ======================= */
-    const draw = await prisma.draw.findUnique({
-      where: { id: dId },
-      include: {
-        _count: {
-          select: {
-            ticket: { where: { status: "ACTIVE" } },
-          },
+    /* 2. DRAW VALIDATION */
+    const foundDraw = await db.query.draw.findFirst({
+      where: eq(draw.id, dId),
+      with: {
+        tickets: {
+          where: eq(ticket.status, "ACTIVE"),
+          columns: { id: true },
         },
       },
     });
 
-    if (!draw) return errorResponse("Draw not found", 404);
-    if (draw.status !== "LIVE") return errorResponse("Draw is not active", 400);
-    if (new Date() > draw.endTime)
+    if (!foundDraw) return errorResponse("Draw not found", 404);
+    if (foundDraw.status !== "LIVE") return errorResponse("Draw is not active", 400);
+    if (new Date() > new Date(foundDraw.endTime))
       return errorResponse("Draw has ended", 400);
-    if (draw._count.ticket >= draw.maxTickets)
+
+    const activeTicketsCount = (foundDraw.tickets || []).length;
+    if (activeTicketsCount >= foundDraw.maxTickets)
       return errorResponse("Draw is sold out", 409);
 
-    /* =======================
-       3. USER WALLET CHECK
-    ======================= */
-    const dbUser = await prisma.user.findUnique({
-      where: { id: uId },
-      select: { wallet: true },
+    /* 3. USER WALLET CHECK */
+    const dbUser = await db.query.user.findFirst({
+      where: eq(user.id, uId),
+      columns: { wallet: true },
     });
 
     if (!dbUser) return errorResponse("User not found", 404);
@@ -68,41 +70,33 @@ export async function POST(request: Request) {
     const walletBalance = dbUser.wallet;
     const safeWalletUsed = Math.max(
       0,
-      Math.min(walletUsed, walletBalance, draw.entryFee)
+      Math.min(walletUsed, walletBalance, foundDraw.entryFee)
     );
 
-    const remainingAmount = draw.entryFee - safeWalletUsed;
+    const remainingAmount = foundDraw.entryFee - safeWalletUsed;
     const finalPayable = remainingAmount + processingFee;
 
-    /* =======================
-       4. MANUAL PAYMENT CHECK
-    ======================= */
+    /* 4. MANUAL PAYMENT CHECK */
     if (finalPayable > 0) {
       if (!transactionId || !screenshot) {
-        return errorResponse(
-          "Transaction ID and screenshot required",
-          400
-        );
+        return errorResponse("Transaction ID and screenshot required", 400);
       }
 
-      const duplicateTxn = await prisma.payment.findUnique({
-        where: { transactionId },
+      const duplicateTxn = await db.query.payment.findFirst({
+        where: eq(payment.transactionId, transactionId),
       });
 
       if (duplicateTxn) {
-        return errorResponse(
-          "This Transaction ID is already used",
-          409
-        );
+        return errorResponse("This Transaction ID is already used", 409);
       }
     }
 
-    const existingPending = await prisma.payment.findFirst({
-      where: {
-        userId: uId,
-        drawId: dId,
-        status: payment_status.PENDING,
-      },
+    const existingPending = await db.query.payment.findFirst({
+      where: and(
+        eq(payment.userId, uId),
+        eq(payment.drawId, dId),
+        eq(payment.status, payment_status.PENDING)
+      ),
     });
 
     if (existingPending) {
@@ -112,35 +106,30 @@ export async function POST(request: Request) {
       );
     }
 
-    /* =======================
-       5. DATABASE TRANSACTION
-    ======================= */
-    const result = await prisma.$transaction(async (tx) => {
+    /* 5. DATABASE TRANSACTION */
+    const result = await db.transaction(async (tx) => {
       /* ---- Wallet Deduction ---- */
       if (safeWalletUsed > 0) {
-        await tx.user.update({
-          where: { id: uId },
-          data: {
-            wallet: { decrement: safeWalletUsed },
-          },
-        });
+        await tx
+          .update(user)
+          .set({ wallet: sql`${user.wallet} - ${safeWalletUsed}` })
+          .where(eq(user.id, uId));
 
-        await tx.walletTransaction.create({
-          data: {
-            userId: uId,
-            amount: -safeWalletUsed,
-            balanceAfter: walletBalance - safeWalletUsed,
-            type: wallet_transaction_type.DEBIT,
-            source: wallet_transaction_source.DRAW_ENTRY,
-            referenceId: dId,
-            remark: `Used for draw #${draw.id}`,
-          },
+        await tx.insert(walletTransaction).values({
+          userId: uId,
+          amount: -safeWalletUsed,
+          balanceAfter: walletBalance - safeWalletUsed,
+          type: wallet_transaction_type.DEBIT,
+          source: wallet_transaction_source.DRAW_ENTRY,
+          referenceId: dId,
+          remark: `Used for draw #${foundDraw.id}`,
         });
       }
 
       /* ---- Payment Record ---- */
-      const payment = await tx.payment.create({
-        data: {
+      const [createdPayment] = await tx
+        .insert(payment)
+        .values({
           userId: uId,
           drawId: dId,
           amount: finalPayable,
@@ -149,40 +138,36 @@ export async function POST(request: Request) {
               ? payment_status.PENDING
               : payment_status.APPROVED,
           method:
-            finalPayable > 0
-              ? payment_method.UPI
-              : payment_method.WALLET,
+            finalPayable > 0 ? payment_method.UPI : payment_method.WALLET,
           gateway: payment_gateway.MANUAL,
           walletUsed: safeWalletUsed,
           transactionId: finalPayable > 0 ? transactionId : null,
           screenshot: finalPayable > 0 ? screenshot : null,
-        },
-      });
+        })
+        .returning();
 
       /* ---- Auto Ticket (Wallet Only) ---- */
       if (finalPayable === 0) {
         const timestamp = Date.now();
         const i = 0;
 
-        await tx.ticket.create({
-          data: {
-            userId: uId,
-            drawId: dId,
-            pricePaid: draw.entryFee,
-            status: "ACTIVE",
-            source: "USER_PURCHASE",
-            paymentId: payment.id,
-            ticketCode: `T-${draw.id}-${timestamp}-${i}-${Math.floor(Math.random() * 1000)}`,
-          },
+        await tx.insert(ticket).values({
+          userId: uId,
+          drawId: dId,
+          pricePaid: foundDraw.entryFee,
+          status: ticket_status.ACTIVE,
+          source: ticket_source.USER_PURCHASE,
+          paymentId: createdPayment.id,
+          ticketCode: `T-${foundDraw.id}-${timestamp}-${i}-${Math.floor(
+            Math.random() * 1000
+          )}`,
         });
       }
 
-      return payment;
+      return createdPayment;
     });
 
-    /* =======================
-       6. RESPONSE
-    ======================= */
+    /* 6. RESPONSE */
     return jsonResponse(
       {
         message:

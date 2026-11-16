@@ -1,9 +1,8 @@
-///Users/xeoren/Desktop/lucky_draw/src/app/api/admin/payments/route.ts
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { count, eq, ilike, or, and, desc, SQL } from "drizzle-orm";
+import { db, payment, user, payment_status } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
-import { payment_status, Prisma } from "@/generated/client/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -17,45 +16,60 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
     const drawId = searchParams.get("drawId");
 
-    // Build Filter
-    const where: Prisma.paymentWhereInput = {};
+    const conditions: SQL[] = [];
 
     if (status && Object.values(payment_status).includes(status)) {
-      where.status = status;
+      conditions.push(eq(payment.status, status));
     }
 
     if (drawId) {
-      where.drawId = BigInt(drawId);
+      conditions.push(eq(payment.drawId, BigInt(drawId)));
     }
 
     if (search) {
-      where.OR = [
-        { transactionId: { contains: search } }, // Case sensitive in MySQL
-        { gatewayOrderId: { contains: search } },
-        { user: { name: { contains: search } } },
-        { user: { mobile: { contains: search } } },
-        { user: { email: { contains: search } } },
+      const matchingUsers = await db.query.user.findMany({
+        where: or(
+          ilike(user.name, `%${search}%`),
+          ilike(user.mobile, `%${search}%`),
+          ilike(user.email, `%${search}%`)
+        ),
+        columns: { id: true },
+      });
+      const uIds = matchingUsers.map((u) => u.id);
+
+      const searchConditions: SQL[] = [
+        ilike(payment.transactionId, `%${search}%`),
+        ilike(payment.gatewayOrderId, `%${search}%`),
       ];
+      if (uIds.length > 0) {
+        searchConditions.push(
+          or(...uIds.map((uid) => eq(payment.userId, uid)))!
+        );
+      }
+      conditions.push(or(...searchConditions)!);
     }
 
-    // Execute Query
-    const [total, payments] = await prisma.$transaction([
-      prisma.payment.count({ where }),
-      prisma.payment.findMany({
-        where,
-        take: limit,
-        skip: (page - 1) * limit,
-        orderBy: { createdAt: "desc" }, // Newest first
-        include: {
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [totalRes, paymentsList] = await Promise.all([
+      db.select({ count: count() }).from(payment).where(whereClause),
+      db.query.payment.findMany({
+        where: whereClause,
+        limit,
+        offset: (page - 1) * limit,
+        orderBy: [desc(payment.createdAt)],
+        with: {
           user: {
-            select: { id: true, name: true, mobile: true, email: true }
+            columns: { id: true, name: true, mobile: true, email: true },
           },
           draw: {
-            select: { id: true, title: true, entryFee: true }
-          }
-        }
+            columns: { id: true, title: true, entryFee: true },
+          },
+        },
       }),
     ]);
+
+    const total = Number(totalRes[0]?.count ?? 0);
 
     return jsonResponse({
       meta: {
@@ -64,9 +78,8 @@ export async function GET(req: NextRequest) {
         limit,
         totalPages: Math.ceil(total / limit),
       },
-      payments
+      payments: paymentsList,
     });
-
   } catch (err) {
     console.error("ADMIN GET PAYMENTS ERROR:", err);
     return errorResponse("Failed to fetch payments", 500);

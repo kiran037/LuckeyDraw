@@ -1,13 +1,22 @@
-///Users/xeoren/Desktop/lucky_draw/src/app/api/admin/payments/[id]/route.ts
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq } from "drizzle-orm";
+import {
+  db,
+  payment,
+  ticket,
+  user,
+  notification,
+  auditlog,
+  walletTransaction,
+  payment_status,
+  ticket_status,
+  ticket_source,
+  wallet_transaction_type,
+  wallet_transaction_source,
+} from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
-import { payment_status, ticket_status, ticket_source, wallet_transaction_type, wallet_transaction_source, Prisma } from "@/generated/client/client";
 
-/* =========================
-   GET — View Single Payment (For Reviewing)
-========================= */
 export async function GET(
   _req: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -18,31 +27,33 @@ export async function GET(
 
     const { id } = await context.params;
 
-    const payment = await prisma.payment.findUnique({
-      where: { id: BigInt(id) },
-      include: {
+    const foundPayment = await db.query.payment.findFirst({
+      where: eq(payment.id, BigInt(id)),
+      with: {
         user: {
-          select: { id: true, name: true, email: true, mobile: true, avatar: true }
+          columns: {
+            id: true,
+            name: true,
+            email: true,
+            mobile: true,
+            avatar: true,
+          },
         },
         draw: {
-          select: { id: true, title: true, bannerImage: true, entryFee: true }
-        }
-      }
+          columns: { id: true, title: true, bannerImage: true, entryFee: true },
+        },
+      },
     });
 
-    if (!payment) return errorResponse("Payment not found", 404);
+    if (!foundPayment) return errorResponse("Payment not found", 404);
 
-    return jsonResponse({ payment });
-
+    return jsonResponse({ payment: foundPayment });
   } catch (err) {
     console.error("ADMIN GET PAYMENT ERROR:", err);
     return errorResponse("Server error", 500);
   }
 }
 
-/* =========================
-   PUT — Approve/Reject Payment
-========================= */
 export async function PUT(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -66,91 +77,72 @@ export async function PUT(
       );
     }
 
-    const payment = await prisma.payment.findUnique({
-      where: { id: BigInt(id) },
-      include: {
+    const foundPayment = await db.query.payment.findFirst({
+      where: eq(payment.id, BigInt(id)),
+      with: {
         draw: {
-          select: {
-            id: true,
-            title: true,
-            entryFee: true,
-            maxTickets: true,
-            _count: { select: { ticket: true } },
+          with: {
+            tickets: { columns: { id: true } },
           },
         },
       },
     });
 
-    if (!payment) return errorResponse("Payment not found", 404);
+    if (!foundPayment) return errorResponse("Payment not found", 404);
 
-    if (payment.status !== payment_status.PENDING) {
-      return errorResponse(`Payment is already ${payment.status}`, 400);
+    if (foundPayment.status !== payment_status.PENDING) {
+      return errorResponse(`Payment is already ${foundPayment.status}`, 400);
     }
 
-    /* =====================================================
-       REJECT
-    ===================================================== */
+    /* REJECT */
     if (newStatus === payment_status.REJECTED) {
-      await prisma.$transaction(async (tx) => {
-        await tx.payment.update({
-          where: { id: payment.id },
-          data: {
+      await db.transaction(async (tx) => {
+        await tx
+          .update(payment)
+          .set({
             status: payment_status.REJECTED,
             failureReason: remark || "Rejected by Admin",
-          },
-        });
-        // 2️⃣ WALLET REFUND (VERY IMPORTANT)
-        if (payment.walletUsed && payment.walletUsed > 0) {
+          })
+          .where(eq(payment.id, foundPayment.id));
 
-          // 🔹 Get current wallet balance
-          const user = await tx.user.findUnique({
-            where: { id: payment.userId },
-            select: { wallet: true },
+        if (foundPayment.walletUsed && foundPayment.walletUsed > 0) {
+          const foundUser = await tx.query.user.findFirst({
+            where: eq(user.id, foundPayment.userId),
+            columns: { wallet: true },
           });
 
-          const newBalance = user!.wallet + payment.walletUsed;
+          const newBalance = (foundUser?.wallet ?? 0) + foundPayment.walletUsed;
 
-          // 🔹 Update wallet
-          await tx.user.update({
-            where: { id: payment.userId },
-            data: {
-              wallet: newBalance,
-            },
-          });
+          await tx
+            .update(user)
+            .set({ wallet: newBalance })
+            .where(eq(user.id, foundPayment.userId));
 
-          // 🔹 Wallet transaction (CREDIT)
-          await tx.walletTransaction.create({
-            data: {
-              userId: payment.userId,
-              amount: payment.walletUsed,
-              balanceAfter: newBalance,
-              type: wallet_transaction_type.CREDIT,
-              source: wallet_transaction_source.REFUND,
-              referenceId: payment.id,
-              remark: `Refund for rejected payment of draw #${payment.draw.id}`,
-            },
+          await tx.insert(walletTransaction).values({
+            userId: foundPayment.userId,
+            amount: foundPayment.walletUsed,
+            balanceAfter: newBalance,
+            type: wallet_transaction_type.CREDIT,
+            source: wallet_transaction_source.REFUND,
+            referenceId: foundPayment.id,
+            remark: `Refund for rejected payment of draw #${foundPayment.draw.id}`,
           });
         }
 
-        // 🔔 USER NOTIFICATION
-        await tx.notification.create({
-          data: {
-            userId: payment.userId,
-            title: "Payment Rejected ❌",
-            message: `Your payment for draw "${payment.draw.title}" was rejected. ${remark ? "Reason: " + remark : ""
-              }`,
-          },
+        await tx.insert(notification).values({
+          userId: foundPayment.userId,
+          title: "Payment Rejected ❌",
+          message: `Your payment for draw "${foundPayment.draw.title}" was rejected. ${
+            remark ? "Reason: " + remark : ""
+          }`,
         });
 
-        // 🧾 AUDIT LOG
-        await tx.auditlog.create({
-          data: {
-            action: "PAYMENT_REJECTED",
-            entity: "PAYMENT",
-            entityId: payment.id,
-            adminId: BigInt(admin.id),
-            meta: JSON.stringify({ remark }),
-          },
+        await tx.insert(auditlog).values({
+          action: "PAYMENT_REJECTED",
+          entity: "PAYMENT",
+          entityId: foundPayment.id,
+          adminId: BigInt(admin.id),
+          meta: JSON.stringify({ remark }),
         });
       });
 
@@ -160,70 +152,59 @@ export async function PUT(
       });
     }
 
-    /* =====================================================
-       APPROVE
-    ===================================================== */
-
-    const entryFee = payment.draw.entryFee;
-    const ticketCount = Math.floor(payment.amount / entryFee);
+    /* APPROVE */
+    const entryFee = foundPayment.draw.entryFee;
+    const ticketCount = Math.floor(foundPayment.amount / entryFee);
 
     if (ticketCount < 1) {
       return errorResponse("Invalid payment amount", 400);
     }
 
-    const currentSold = payment.draw._count.ticket;
-    if (currentSold + ticketCount > payment.draw.maxTickets) {
+    const currentSold = (foundPayment.draw.tickets || []).length;
+    if (currentSold + ticketCount > foundPayment.draw.maxTickets) {
       return errorResponse("Not enough tickets left", 400);
     }
 
-    const ticketsData: Prisma.ticketUncheckedCreateInput[] = [];
+    const ticketsData: (typeof ticket.$inferInsert)[] = [];
     const timestamp = Date.now();
 
     for (let i = 0; i < ticketCount; i++) {
       ticketsData.push({
-        ticketCode: `T-${payment.draw.id}-${timestamp}-${i}-${Math.floor(
+        ticketCode: `T-${foundPayment.draw.id}-${timestamp}-${i}-${Math.floor(
           Math.random() * 1000
         )}`,
-        userId: payment.userId,
-        drawId: payment.draw.id,
+        userId: foundPayment.userId,
+        drawId: foundPayment.draw.id,
         pricePaid: entryFee,
         status: ticket_status.ACTIVE,
         source: ticket_source.USER_PURCHASE,
-        paymentId: i === 0 ? payment.id : null,
+        paymentId: i === 0 ? foundPayment.id : null,
       });
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.payment.update({
-        where: { id: payment.id },
-        data: { status: payment_status.APPROVED },
+    await db.transaction(async (tx) => {
+      await tx
+        .update(payment)
+        .set({ status: payment_status.APPROVED })
+        .where(eq(payment.id, foundPayment.id));
+
+      await tx.insert(ticket).values(ticketsData);
+
+      await tx.insert(notification).values({
+        userId: foundPayment.userId,
+        title: "Payment Approved ✅",
+        message: `Your payment for draw "${foundPayment.draw.title}" has been approved. ${ticketCount} ticket(s) added to your account.`,
       });
 
-      const [firstTicket, ...rest] = ticketsData;
-      await tx.ticket.create({ data: firstTicket });
-      if (rest.length > 0) await tx.ticket.createMany({ data: rest });
-
-      // 🔔 USER NOTIFICATION
-      await tx.notification.create({
-        data: {
-          userId: payment.userId,
-          title: "Payment Approved ✅",
-          message: `Your payment for draw "${payment.draw.title}" has been approved. ${ticketCount} ticket(s) added to your account.`,
-        },
-      });
-
-      // 🧾 AUDIT LOG
-      await tx.auditlog.create({
-        data: {
-          action: "PAYMENT_APPROVED",
-          entity: "PAYMENT",
-          entityId: payment.id,
-          adminId: BigInt(admin.id),
-          meta: JSON.stringify({
-            ticketsGenerated: ticketCount,
-            remark,
-          }),
-        },
+      await tx.insert(auditlog).values({
+        action: "PAYMENT_APPROVED",
+        entity: "PAYMENT",
+        entityId: foundPayment.id,
+        adminId: BigInt(admin.id),
+        meta: JSON.stringify({
+          ticketsGenerated: ticketCount,
+          remark,
+        }),
       });
     });
 

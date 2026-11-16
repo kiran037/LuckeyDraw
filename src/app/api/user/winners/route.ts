@@ -1,6 +1,6 @@
-// src/app/api/user/winners/route.ts
-import { prisma } from "@/lib/prisma";
-import { jsonResponse, errorResponse } from "@/lib/api-utils"; // Use the helpers we made
+import { count, desc } from "drizzle-orm";
+import { db, winner } from "@/db";
+import { jsonResponse, errorResponse } from "@/lib/api-utils";
 
 export async function GET(req: Request) {
   try {
@@ -9,50 +9,47 @@ export async function GET(req: Request) {
     const limit = Math.max(1, parseInt(searchParams.get("limit") || "10"));
     const skip = (page - 1) * limit;
 
-    // Run queries in parallel for better performance
-    const [winners, total] = await Promise.all([
-      prisma.winner.findMany({
-        skip,
-        take: limit,
-        orderBy: {
-          declaredAt: "desc",
-        },
-        include: {
+    const [winners, totalRes] = await Promise.all([
+      db.query.winner.findMany({
+        offset: skip,
+        limit,
+        orderBy: [desc(winner.declaredAt)],
+        with: {
           user: {
-            select: {
+            columns: {
               name: true,
               avatar: true,
               mobile: true,
             },
           },
           draw: {
-            select: {
+            columns: {
               title: true,
             },
           },
           drawproduct: {
-            select: {
+            columns: {
               name: true,
               image: true,
             },
           },
           ticket: {
-            select: {
+            columns: {
               ticketCode: true,
             },
           },
         },
       }),
-      prisma.winner.count(),
+      db.select({ count: count() }).from(winner),
     ]);
 
-    // Transform data
+    const total = Number(totalRes[0]?.count ?? 0);
+
     const formattedWinners = winners.map((w) => ({
-      id: w.id, // jsonResponse will handle BigInt conversion automatically
+      id: w.id,
       userName: w.user.name,
       userAvatar: w.user.avatar,
-      // Mask mobile: 1234567890 -> ******7890
-      maskedMobile: w.user.mobile.replace(/.(?=.{4})/g, "*"), 
+      maskedMobile: w.user.mobile.replace(/.(?=.{4})/g, "*"),
       prizeName: w.drawproduct.name,
       prizeImage: w.drawproduct.image,
       drawTitle: w.draw.title,
@@ -69,7 +66,6 @@ export async function GET(req: Request) {
         pages: Math.ceil(total / limit),
       },
     });
-
   } catch (error) {
     console.error("GET WINNERS ERROR:", error);
     return errorResponse("Failed to fetch winners", 500);

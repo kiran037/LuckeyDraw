@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { count, eq, ilike, and, desc, inArray, SQL } from "drizzle-orm";
+import { db, draw, drawproduct, ticket, draw_status } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
-import { draw_status, Prisma } from "@/generated/client/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,33 +15,39 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
     const status = searchParams.get("status") as draw_status | undefined;
 
-    const where: Prisma.drawWhereInput = {};
+    const conditions: SQL[] = [];
 
     if (search) {
-      where.title = { contains: search };
+      conditions.push(ilike(draw.title, `%${search}%`));
     }
 
     if (status && Object.values(draw_status).includes(status)) {
-      where.status = status;
+      conditions.push(eq(draw.status, status));
     }
 
-    const [total, draws] = await prisma.$transaction([
-      prisma.draw.count({ where }),
-      prisma.draw.findMany({
-        where,
-        take: limit,
-        skip: (page - 1) * limit,
-        orderBy: { createdAt: "desc" },
-        include: {
-          _count: { select: { ticket: true, drawproduct: true } },
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [totalRes, drawsList] = await Promise.all([
+      db.select({ count: count() }).from(draw).where(whereClause),
+      db.query.draw.findMany({
+        where: whereClause,
+        limit,
+        offset: (page - 1) * limit,
+        orderBy: [desc(draw.createdAt)],
+        with: {
+          tickets: { columns: { id: true } },
+          drawproducts: { columns: { id: true } },
         },
       }),
     ]);
 
-    const formattedDraws = draws.map((d) => {
-      const sold = d._count.ticket;
+    const total = Number(totalRes[0]?.count ?? 0);
+
+    const formattedDraws = drawsList.map((d) => {
+      const sold = (d.tickets || []).length;
       const totalTickets = d.maxTickets;
-      const percentage = totalTickets > 0 ? Math.round((sold / totalTickets) * 100) : 0;
+      const percentage =
+        totalTickets > 0 ? Math.round((sold / totalTickets) * 100) : 0;
 
       return {
         id: d.id.toString(),
@@ -50,15 +56,15 @@ export async function GET(req: NextRequest) {
         bannerImage: d.bannerImage,
         entryFee: d.entryFee,
         maxTickets: d.maxTickets,
-        startTime: d.startTime.toISOString(),
-        endTime: d.endTime.toISOString(),
+        startTime: new Date(d.startTime).toISOString(),
+        endTime: new Date(d.endTime).toISOString(),
         status: d.status,
-        createdAt: d.createdAt.toISOString(),
+        createdAt: new Date(d.createdAt).toISOString(),
         stats: {
           sold,
           percentage,
-          productCount: d._count.drawproduct
-        }
+          productCount: (d.drawproducts || []).length,
+        },
       };
     });
 
@@ -71,7 +77,6 @@ export async function GET(req: NextRequest) {
         totalPages: Math.ceil(total / limit),
       },
     });
-
   } catch (err) {
     console.error("ADMIN GET DRAWS ERROR:", err);
     return errorResponse("Failed to fetch draws", 500);
@@ -86,11 +91,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     if (!body.title?.trim()) return errorResponse("Title is required", 400);
-    if (!body.startTime || !body.endTime) return errorResponse("Dates are required", 400);
+    if (!body.startTime || !body.endTime)
+      return errorResponse("Dates are required", 400);
 
     const startTime = new Date(body.startTime);
     const endTime = new Date(body.endTime);
-    if (startTime >= endTime) return errorResponse("End time must be after start time", 400);
+    if (startTime >= endTime)
+      return errorResponse("End time must be after start time", 400);
 
     const entryFee = Math.max(0, Number(body.entryFee || 0));
     const maxTickets = Math.max(1, Number(body.maxTickets || 100));
@@ -99,9 +106,10 @@ export async function POST(req: NextRequest) {
       ? body.productIds.map((id: string | number) => BigInt(id))
       : [];
 
-    const result = await prisma.$transaction(async (tx) => {
-      const newDraw = await tx.draw.create({
-        data: {
+    const result = await db.transaction(async (tx) => {
+      const [newDraw] = await tx
+        .insert(draw)
+        .values({
           title: body.title.trim(),
           description: body.description?.trim() || null,
           bannerImage: body.bannerImage || null,
@@ -111,24 +119,26 @@ export async function POST(req: NextRequest) {
           startTime,
           endTime,
           status: (body.status as draw_status) || draw_status.DRAFT,
-        },
-      });
+        })
+        .returning();
 
       if (productIdsToAssign.length > 0) {
-        await tx.drawproduct.updateMany({
-          where: { id: { in: productIdsToAssign } },
-          data: { drawId: newDraw.id },
-        });
+        await tx
+          .update(drawproduct)
+          .set({ drawId: newDraw.id })
+          .where(inArray(drawproduct.id, productIdsToAssign));
       }
 
       return newDraw;
     });
 
-    return jsonResponse({
-      message: "Draw created successfully",
-      draw: result,
-    }, 201);
-
+    return jsonResponse(
+      {
+        message: "Draw created successfully",
+        draw: result,
+      },
+      201
+    );
   } catch (err) {
     console.error("ADMIN CREATE DRAW ERROR:", err);
     return errorResponse("Failed to create draw", 500);

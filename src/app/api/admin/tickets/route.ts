@@ -1,14 +1,16 @@
-///Users/xeoren/Desktop/lucky_draw/src/app/api/admin/tickets/route.ts
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { count, eq, ilike, or, and, desc, SQL } from "drizzle-orm";
+import {
+  db,
+  ticket,
+  draw,
+  user,
+  ticket_status,
+  ticket_source,
+} from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
-import { ticket_status, ticket_source, Prisma } from "@/generated/client/client";
 
-/* =========================
-   GET — List Tickets (Advanced)
-   Query: page, limit, search, status, drawId, userId
-========================= */
 export async function GET(req: NextRequest) {
   try {
     const admin = await requireAdmin();
@@ -22,47 +24,77 @@ export async function GET(req: NextRequest) {
     const drawId = searchParams.get("drawId");
     const userId = searchParams.get("userId");
 
-    // Build Filter Query
-    const where: Prisma.ticketWhereInput = {};
+    const conditions: SQL[] = [];
 
     if (status && Object.values(ticket_status).includes(status)) {
-      where.status = status;
+      conditions.push(eq(ticket.status, status));
     }
 
-    if (drawId) where.drawId = BigInt(drawId);
-    if (userId) where.userId = BigInt(userId);
+    if (drawId) conditions.push(eq(ticket.drawId, BigInt(drawId)));
+    if (userId) conditions.push(eq(ticket.userId, BigInt(userId)));
 
-    // Advanced Search (Ticket Code OR User Name OR User Mobile)
     if (search) {
-      where.OR = [
-        { ticketCode: { contains: search } }, 
-        { user: { name: { contains: search } } },
-        { user: { mobile: { contains: search } } },
-        { user: { email: { contains: search } } },
-      ];
+      // Find matching users first if search applies to user info
+      const matchingUsers = await db.query.user.findMany({
+        where: or(
+          ilike(user.name, `%${search}%`),
+          ilike(user.mobile, `%${search}%`),
+          ilike(user.email, `%${search}%`)
+        ),
+        columns: { id: true },
+      });
+      const uIds = matchingUsers.map((u) => u.id);
+
+      const searchConditions: SQL[] = [ilike(ticket.ticketCode, `%${search}%`)];
+      if (uIds.length > 0) {
+        // add user condition
+        searchConditions.push(
+          or(...uIds.map((uid) => eq(ticket.userId, uid)))!
+        );
+      }
+      conditions.push(or(...searchConditions)!);
     }
 
-    // Transaction for Count + Data
-    const [total, tickets] = await prisma.$transaction([
-      prisma.ticket.count({ where }),
-      prisma.ticket.findMany({
-        where,
-        take: limit,
-        skip: (page - 1) * limit,
-        orderBy: { createdAt: "desc" },
-        include: {
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [totalRes, ticketsList] = await Promise.all([
+      db.select({ count: count() }).from(ticket).where(whereClause),
+      db.query.ticket.findMany({
+        where: whereClause,
+        limit,
+        offset: (page - 1) * limit,
+        orderBy: [desc(ticket.createdAt)],
+        with: {
           user: {
-            select: { id: true, name: true, email: true, mobile: true, avatar: true }
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              mobile: true,
+              avatar: true,
+            },
           },
           draw: {
-            select: { id: true, title: true, status: true, endTime: true }
+            columns: {
+              id: true,
+              title: true,
+              status: true,
+              endTime: true,
+            },
           },
           payment: {
-            select: { id: true, status: true, method: true, amount: true }
-          }
+            columns: {
+              id: true,
+              status: true,
+              method: true,
+              amount: true,
+            },
+          },
         },
       }),
     ]);
+
+    const total = Number(totalRes[0]?.count ?? 0);
 
     return jsonResponse({
       meta: {
@@ -71,74 +103,66 @@ export async function GET(req: NextRequest) {
         limit,
         totalPages: Math.ceil(total / limit),
       },
-      tickets,
+      tickets: ticketsList,
     });
-
   } catch (err) {
     console.error("ADMIN GET TICKETS ERROR:", err);
     return errorResponse("Failed to fetch tickets", 500);
   }
 }
 
-/* =========================
-   POST — Manually Create Ticket (Admin)
-   Usage: Assign tickets to a user manually (e.g. offline sale)
-========================= */
 export async function POST(req: NextRequest) {
   try {
     const admin = await requireAdmin();
     if (!admin) return errorResponse("Unauthorized", 401);
 
     const body = await req.json();
-    
-    // Validation
-    if (!body.drawId || !body.userId) return errorResponse("Draw ID and User ID are required", 400);
-    const count = Math.max(1, Number(body.count || 1)); // Number of tickets to generate
-    
-    // Check if Draw exists and is valid
-    const draw = await prisma.draw.findUnique({
-      where: { id: BigInt(body.drawId) },
-      select: { 
-        id: true, 
-        entryFee: true, 
-        maxTickets: true, 
-        _count: { select: { ticket: true } } 
-      } 
+
+    if (!body.drawId || !body.userId)
+      return errorResponse("Draw ID and User ID are required", 400);
+    const ticketCount = Math.max(1, Number(body.count || 1));
+
+    const foundDraw = await db.query.draw.findFirst({
+      where: eq(draw.id, BigInt(body.drawId)),
+      with: {
+        tickets: { columns: { id: true } },
+      },
     });
 
-    if (!draw) return errorResponse("Draw not found", 404);
+    if (!foundDraw) return errorResponse("Draw not found", 404);
 
-    // Check availability
-    if (draw._count.ticket + count > draw.maxTickets) {
-      return errorResponse(`Not enough tickets remaining. Left: ${draw.maxTickets - draw._count.ticket}`, 400);
+    const soldCount = (foundDraw.tickets || []).length;
+    if (soldCount + ticketCount > foundDraw.maxTickets) {
+      return errorResponse(
+        `Not enough tickets remaining. Left: ${foundDraw.maxTickets - soldCount}`,
+        400
+      );
     }
 
-    // Generate Tickets
-    const ticketsData = [];
+    const ticketsData: (typeof ticket.$inferInsert)[] = [];
     const timestamp = Date.now();
 
-    for (let i = 0; i < count; i++) {
-      // Added 'i' to ticketCode to ensure uniqueness in batch generation
+    for (let i = 0; i < ticketCount; i++) {
       ticketsData.push({
         drawId: BigInt(body.drawId),
         userId: BigInt(body.userId),
-        ticketCode: `ADM-${timestamp}-${i}-${Math.floor(Math.random() * 10000)}`, 
-        pricePaid: body.pricePaid !== undefined ? Number(body.pricePaid) : draw.entryFee,
+        ticketCode: `ADM-${timestamp}-${i}-${Math.floor(Math.random() * 10000)}`,
+        pricePaid:
+          body.pricePaid !== undefined
+            ? Number(body.pricePaid)
+            : foundDraw.entryFee,
         status: ticket_status.ACTIVE,
         source: ticket_source.ADMIN_MANUAL,
         createdByAdminId: BigInt(admin.id),
       });
     }
 
-    await prisma.ticket.createMany({
-      data: ticketsData
-    });
+    await db.insert(ticket).values(ticketsData);
 
     return jsonResponse({
       success: true,
-      message: `${count} ticket(s) created successfully`,
+      message: `${ticketCount} ticket(s) created successfully`,
     });
-
   } catch (err) {
     console.error("ADMIN CREATE TICKET ERROR:", err);
     return errorResponse("Failed to create tickets manually", 500);

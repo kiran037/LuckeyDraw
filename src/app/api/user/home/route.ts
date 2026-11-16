@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
+import { count, eq, lte, gte, ne, and, asc, desc } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { draw_status } from "@/generated/client/client"; // Correct Import
+import { db, draw, winner, ticket, drawproduct, draw_status } from "@/db";
 
 type UserTicketData = {
   id: string;
@@ -26,51 +26,59 @@ export async function GET() {
     const now = new Date();
 
     // 1. Run lightweight Count queries
-    const [activeDrawsCount, totalWinnersCount] = await Promise.all([
-      prisma.draw.count({
-        where: {
-          status: draw_status.LIVE,
-          startTime: { lte: now },
-          endTime: { gte: now },
-        },
-      }),
-      prisma.winner.count(),
+    const [activeDrawsRes, totalWinnersRes] = await Promise.all([
+      db
+        .select({ count: count() })
+        .from(draw)
+        .where(
+          and(
+            eq(draw.status, draw_status.LIVE),
+            lte(draw.startTime, now),
+            gte(draw.endTime, now)
+          )
+        ),
+      db.select({ count: count() }).from(winner),
     ]);
 
-    // 2. Calculate Total Prize Pool (Efficient)
-    const allDrawsForPool = await prisma.draw.findMany({
-      where: { status: { not: draw_status.DRAFT } },
-      select: { entryFee: true, maxTickets: true },
+    const activeDrawsCount = Number(activeDrawsRes[0]?.count ?? 0);
+    const totalWinnersCount = Number(totalWinnersRes[0]?.count ?? 0);
+
+    // 2. Calculate Total Prize Pool
+    const allDrawsForPool = await db.query.draw.findMany({
+      where: ne(draw.status, draw_status.DRAFT),
+      columns: { entryFee: true, maxTickets: true },
     });
 
     const totalPrizePool = allDrawsForPool.reduce(
-      (sum, draw) => sum + (draw.entryFee * draw.maxTickets),
+      (sum, d) => sum + d.entryFee * d.maxTickets,
       0
     );
 
     // 3. Get Live Draws
-    const liveDraws = await prisma.draw.findMany({
-      where: {
-        status: draw_status.LIVE,
-        startTime: { lte: now },
-        endTime: { gte: now },
-      },
-      take: 5,
-      orderBy: { endTime: "asc" },
-      include: {
-        drawproduct: { select: { id: true, name: true, image: true, quantity: true } },
-        _count: { select: { ticket: true } },
+    const liveDraws = await db.query.draw.findMany({
+      where: and(
+        eq(draw.status, draw_status.LIVE),
+        lte(draw.startTime, now),
+        gte(draw.endTime, now)
+      ),
+      limit: 5,
+      orderBy: [asc(draw.endTime)],
+      with: {
+        drawproducts: {
+          columns: { id: true, name: true, image: true, quantity: true },
+        },
+        tickets: { columns: { id: true } },
       },
     });
 
     // 4. Get Recent Winners
-    const recentWinners = await prisma.winner.findMany({
-      take: 5,
-      orderBy: { declaredAt: "desc" },
-      include: {
-        user: { select: { name: true, avatar: true } },
-        draw: { select: { title: true } },
-        drawproduct: { select: { name: true } },
+    const recentWinners = await db.query.winner.findMany({
+      limit: 5,
+      orderBy: [desc(winner.declaredAt)],
+      with: {
+        user: { columns: { name: true, avatar: true } },
+        draw: { columns: { title: true } },
+        drawproduct: { columns: { name: true } },
       },
     });
 
@@ -79,58 +87,64 @@ export async function GET() {
     let userTickets: UserTicketData[] = [];
 
     if (user) {
-        const userIdBigInt = BigInt(user.id);
-        
-        const [count, tickets] = await Promise.all([
-            prisma.ticket.count({ where: { userId: userIdBigInt } }),
-            prisma.ticket.findMany({
-                where: { userId: userIdBigInt },
-                take: 3,
-                orderBy: { createdAt: "desc" },
-                include: {
-                  draw: {
-                    select: {
-                      id: true,
-                      title: true,
-                      description: true,
-                      status: true,
-                      bannerImage: true,
-                      endTime: true,
-                      resultAt: true,
-                      drawproduct: {
-                        select: { id: true, name: true, image: true },
-                        take: 1, // Only fetch one for thumbnail
-                      },
-                    },
-                  },
-                  payment: {
-                    select: { id: true, amount: true, status: true },
-                  },
+      const userIdBigInt = BigInt(user.id);
+
+      const [countRes, tickets] = await Promise.all([
+        db
+          .select({ count: count() })
+          .from(ticket)
+          .where(eq(ticket.userId, userIdBigInt)),
+        db.query.ticket.findMany({
+          where: eq(ticket.userId, userIdBigInt),
+          limit: 3,
+          orderBy: [desc(ticket.createdAt)],
+          with: {
+            draw: {
+              columns: {
+                id: true,
+                title: true,
+                description: true,
+                status: true,
+                bannerImage: true,
+                endTime: true,
+                resultAt: true,
+              },
+              with: {
+                drawproducts: {
+                  columns: { id: true, name: true, image: true },
+                  limit: 1,
                 },
-            })
-        ]);
+              },
+            },
+            payment: {
+              columns: { id: true, amount: true, status: true },
+            },
+          },
+        }),
+      ]);
 
-        userTicketsCount = count;
+      userTicketsCount = Number(countRes[0]?.count ?? 0);
 
-        userTickets = tickets.map((ticket) => ({
-            id: ticket.id.toString(),
-            ticketCode: ticket.ticketCode,
-            isWinner: ticket.isWinner,
-            status: ticket.status,
-            createdAt: ticket.createdAt.toISOString(),
-            draw: ticket.draw
-              ? {
-                  id: ticket.draw.id.toString(),
-                  title: ticket.draw.title,
-                  status: ticket.draw.status,
-                  bannerImage: ticket.draw.bannerImage,
-                  endTime: ticket.draw.endTime.toISOString(),
-                  resultAt: ticket.draw.resultAt?.toISOString(),
-                  // Safe access
-                  productImage: ticket.draw.drawproduct[0]?.image || null,
-                }
-              : null,
-          }));
+      userTickets = tickets.map((t) => ({
+        id: t.id.toString(),
+        ticketCode: t.ticketCode,
+        isWinner: t.isWinner,
+        status: t.status,
+        createdAt: new Date(t.createdAt).toISOString(),
+        draw: t.draw
+          ? {
+              id: t.draw.id.toString(),
+              title: t.draw.title,
+              status: t.draw.status,
+              bannerImage: t.draw.bannerImage,
+              endTime: new Date(t.draw.endTime).toISOString(),
+              resultAt: t.draw.resultAt
+                ? new Date(t.draw.resultAt).toISOString()
+                : undefined,
+              productImage: t.draw.drawproducts?.[0]?.image || null,
+            }
+          : null,
+      }));
     }
 
     return NextResponse.json({
@@ -142,18 +156,18 @@ export async function GET() {
           happyWinners: totalWinnersCount,
           userTickets: user ? userTicketsCount : undefined,
         },
-        liveDraws: liveDraws.map((draw) => ({
-          id: draw.id.toString(),
-          title: draw.title,
-          description: draw.description,
-          bannerImage: draw.bannerImage,
-          entryFee: draw.entryFee,
-          startTime: draw.startTime.toISOString(),
-          endTime: draw.endTime.toISOString(),
-          maxTickets: draw.maxTickets,
-          status: draw.status,
-          ticketCount: draw._count.ticket,
-          products: draw.drawproduct.map((p) => ({
+        liveDraws: liveDraws.map((d) => ({
+          id: d.id.toString(),
+          title: d.title,
+          description: d.description,
+          bannerImage: d.bannerImage,
+          entryFee: d.entryFee,
+          startTime: new Date(d.startTime).toISOString(),
+          endTime: new Date(d.endTime).toISOString(),
+          maxTickets: d.maxTickets,
+          status: d.status,
+          ticketCount: (d.tickets || []).length,
+          products: (d.drawproducts || []).map((p) => ({
             id: p.id.toString(),
             name: p.name,
             image: p.image,
@@ -161,19 +175,22 @@ export async function GET() {
           })),
         })),
         userTickets,
-        recentWinners: recentWinners.map((winner) => ({
-          id: winner.id.toString(),
-          userName: winner.user.name,
-          userAvatar: winner.user.avatar,
-          drawTitle: winner.draw.title,
-          productName: winner.drawproduct.name,
-          declaredAt: winner.declaredAt.toISOString(),
+        recentWinners: recentWinners.map((w) => ({
+          id: w.id.toString(),
+          userName: w.user.name,
+          userAvatar: w.user.avatar,
+          drawTitle: w.draw.title,
+          productName: w.drawproduct.name,
+          declaredAt: new Date(w.declaredAt).toISOString(),
         })),
         isLoggedIn: !!user,
       },
     });
   } catch (error) {
     console.error("GET HOME DATA ERROR:", error);
-    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: "Server error" },
+      { status: 500 }
+    );
   }
 }

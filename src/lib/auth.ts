@@ -1,9 +1,8 @@
 // src/lib/auth.ts
 import { cookies } from "next/headers";
 import jwt, { JwtPayload } from "jsonwebtoken";
-import { prisma } from "./prisma";
-// ADJUST THIS PATH IF YOUR PRISMA CLIENT IS ELSEWHERE (e.g., @prisma/client)
-import { user_role } from "@/generated/client/client"; 
+import { eq } from "drizzle-orm";
+import { db, user, user_role } from "@/db";
 
 /* -------------------- Types -------------------- */
 
@@ -39,9 +38,9 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
     if (!decoded?.userId) return null;
 
-    const user = await prisma.user.findUnique({
-      where: { id: BigInt(decoded.userId) },
-      select: {
+    const foundUser = await db.query.user.findFirst({
+      where: eq(user.id, BigInt(decoded.userId)),
+      columns: {
         id: true,
         name: true,
         email: true,
@@ -53,11 +52,11 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       },
     });
 
-    if (!user || !user.isActive) return null;
+    if (!foundUser || !foundUser.isActive) return null;
 
     return {
-      ...user,
-      id: user.id.toString(),
+      ...foundUser,
+      id: foundUser.id.toString(),
     };
   } catch {
     return null;

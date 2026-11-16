@@ -1,68 +1,95 @@
 import { NextResponse } from "next/server";
+import { count, sum, eq, and, desc } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { payment_status, draw_status } from "@/generated/client/client"; // Correct Import
+import {
+  db,
+  ticket,
+  payment,
+  draw,
+  winner,
+  payment_status,
+  draw_status,
+} from "@/db";
 
 export async function GET() {
   try {
     const user = await getCurrentUser();
 
     if (!user) {
-      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { success: false, message: "Unauthorized" },
+        { status: 401 }
+      );
     }
 
     const userId = BigInt(user.id);
 
     const [
-      totalTickets,
-      winningTickets,
-      totalSpentAgg,
-      liveDrawsCount,
+      totalTicketsRes,
+      winningTicketsRes,
+      totalSpentRes,
+      liveDrawsRes,
       recentWinners,
     ] = await Promise.all([
-      prisma.ticket.count({ where: { userId } }),
-      prisma.ticket.count({ where: { userId, isWinner: true } }),
-      prisma.payment.aggregate({
-        where: { userId, status: payment_status.APPROVED },
-        _sum: { amount: true },
-      }),
-      prisma.draw.count({ where: { status: draw_status.LIVE } }),
-      prisma.winner.findMany({
-        take: 5,
-        orderBy: { declaredAt: "desc" },
-        include: {
+      db.select({ count: count() }).from(ticket).where(eq(ticket.userId, userId)),
+      db
+        .select({ count: count() })
+        .from(ticket)
+        .where(and(eq(ticket.userId, userId), eq(ticket.isWinner, true))),
+      db
+        .select({ total: sum(payment.amount) })
+        .from(payment)
+        .where(
+          and(
+            eq(payment.userId, userId),
+            eq(payment.status, payment_status.APPROVED)
+          )
+        ),
+      db
+        .select({ count: count() })
+        .from(draw)
+        .where(eq(draw.status, draw_status.LIVE)),
+      db.query.winner.findMany({
+        limit: 5,
+        orderBy: [desc(winner.declaredAt)],
+        with: {
           ticket: {
-            include: {
-              user: { select: { name: true } },
-              draw: { select: { title: true } },
+            with: {
+              user: { columns: { name: true } },
+              draw: { columns: { title: true } },
             },
           },
-          drawproduct: { select: { name: true } },
+          drawproduct: { columns: { name: true } },
         },
       }),
     ]);
 
-    const winRate = totalTickets > 0
+    const totalTickets = Number(totalTicketsRes[0]?.count ?? 0);
+    const winningTickets = Number(winningTicketsRes[0]?.count ?? 0);
+    const totalSpent = Number(totalSpentRes[0]?.total ?? 0);
+    const liveDrawsCount = Number(liveDrawsRes[0]?.count ?? 0);
+
+    const winRate =
+      totalTickets > 0
         ? Number(((winningTickets / totalTickets) * 100).toFixed(1))
         : 0;
 
-    const formattedWinners = recentWinners.map((winner) => ({
-      id: winner.id.toString(),
-      // Handle potential nulls in relations gracefully if needed
-      name: winner.ticket?.user?.name || "Unknown", 
-      prize: winner.drawproduct?.name || "Prize",
-      drawTitle: winner.ticket?.draw?.title || "Draw",
-      winDate: winner.declaredAt.toISOString(),
+    const formattedWinners = recentWinners.map((w) => ({
+      id: w.id.toString(),
+      name: w.ticket?.user?.name || "Unknown",
+      prize: w.drawproduct?.name || "Prize",
+      drawTitle: w.ticket?.draw?.title || "Draw",
+      winDate: new Date(w.declaredAt).toISOString(),
     }));
 
     return NextResponse.json({
       success: true,
       data: {
         stats: {
-          totalTickets: Number(totalTickets),
-          winningTickets: Number(winningTickets),
-          totalSpent: totalSpentAgg._sum.amount ?? 0,
-          liveDrawsCount: Number(liveDrawsCount),
+          totalTickets,
+          winningTickets,
+          totalSpent,
+          liveDrawsCount,
           winRate,
         },
         recentWinners: formattedWinners,
@@ -70,6 +97,9 @@ export async function GET() {
     });
   } catch (error) {
     console.error("GET DASHBOARD STATS ERROR:", error);
-    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: "Server error" },
+      { status: 500 }
+    );
   }
 }

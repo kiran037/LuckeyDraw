@@ -1,9 +1,8 @@
-///Users/xeoren/Desktop/lucky_draw/src/app/api/admin/reports/users/route.ts
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { count, or, ilike, eq, desc, SQL } from "drizzle-orm";
+import { db, user, payment } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
-import { Prisma } from "@/generated/client/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,71 +13,58 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const limit = Math.max(1, parseInt(searchParams.get("limit") || "20"));
     const search = searchParams.get("search");
-    const sortBy = searchParams.get("sortBy"); // 'spend' or 'date'
+    const sortBy = searchParams.get("sortBy");
 
-    const where: Prisma.userWhereInput = {};
-
+    let whereClause: SQL | undefined = undefined;
     if (search) {
-      where.OR = [
-        { name: { contains: search } },
-        { email: { contains: search } },
-        { mobile: { contains: search } },
-      ];
+      whereClause = or(
+        ilike(user.name, `%${search}%`),
+        ilike(user.email, `%${search}%`),
+        ilike(user.mobile, `%${search}%`)
+      );
     }
 
-    // Fetch users with counts and total spend
-    // Note: Sorting by "total spent" usually requires raw SQL or post-processing in Prisma.
-    // For scalability, we sort by Date in DB, and can do spend sorting on current page or filtered set.
-
-    const [total, users] = await prisma.$transaction([
-      prisma.user.count({ where }),
-      prisma.user.findMany({
-        where,
-        take: limit,
-        skip: (page - 1) * limit,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          name: true,
-          adharcard: true,
-          pancard: true,
-          address: true,
-          email: true,
-          mobile: true,
-          createdAt: true,
-          isActive: true,
-          _count: {
-            select: {
-              tickets: true, // "tickets" is correct per schema @relation("UserTickets")
-              payment: true  // "payment" is correct per schema
-            }
+    const [totalRes, usersList] = await Promise.all([
+      db.select({ count: count() }).from(user).where(whereClause),
+      db.query.user.findMany({
+        where: whereClause,
+        limit,
+        offset: (page - 1) * limit,
+        orderBy: [desc(user.createdAt)],
+        with: {
+          tickets: { columns: { id: true } },
+          payments: {
+            columns: { amount: true, status: true },
           },
-          // Fetch approved payments sum
-          payment: {
-            where: { status: "APPROVED" },
-            select: { amount: true }
-          }
-        }
+        },
       }),
     ]);
 
-    const report = users.map(u => ({
-      id: u.id,
-      name: u.name,
-      address: u.address,
-      adharcard: u.adharcard,
-      pancard: u.pancard,
-      contact: { email: u.email, mobile: u.mobile },
-      joinedAt: u.createdAt,
-      stats: {
-        totalTickets: u._count.tickets,
-        totalTransactions: u._count.payment,
-        totalSpent: u.payment.reduce((sum, p) => sum + p.amount, 0)
-      }
-    }));
+    const total = Number(totalRes[0]?.count ?? 0);
 
-    // If explicit sort by spend is requested (works only on the fetched page in this method)
-    if (sortBy === 'spend') {
+    const report = usersList.map((u) => {
+      const approvedPayments = (u.payments || []).filter(
+        (p) => p.status === "APPROVED"
+      );
+      const totalSpent = approvedPayments.reduce((sum, p) => sum + p.amount, 0);
+
+      return {
+        id: u.id,
+        name: u.name,
+        address: u.address,
+        adharcard: u.adharcard,
+        pancard: u.pancard,
+        contact: { email: u.email, mobile: u.mobile },
+        joinedAt: u.createdAt,
+        stats: {
+          totalTickets: (u.tickets || []).length,
+          totalTransactions: (u.payments || []).length,
+          totalSpent,
+        },
+      };
+    });
+
+    if (sortBy === "spend") {
       report.sort((a, b) => b.stats.totalSpent - a.stats.totalSpent);
     }
 
@@ -86,7 +72,6 @@ export async function GET(req: NextRequest) {
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
       data: report,
     });
-
   } catch (err) {
     console.error("REPORT USERS ERROR:", err);
     return errorResponse("Failed to generate user report", 500);

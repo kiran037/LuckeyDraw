@@ -1,11 +1,20 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { count, eq, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { getCurrentUser } from "@/lib/auth";
+import { db, user, ticket, notification } from "@/db";
 
-/* =====================================================
-   GET : Fetch User Profile + Stats (Wallet + Referral)
-===================================================== */
+interface UserUpdateData {
+  name?: string;
+  adharcard?: string;
+  pancard?: string;
+  address?: string;
+  avatar?: string | null;
+  email?: string;
+  mobile?: string;
+  password?: string;
+}
+
 export async function GET() {
   try {
     const sessionUser = await getCurrentUser();
@@ -20,18 +29,25 @@ export async function GET() {
     const userId = BigInt(sessionUser.id);
 
     const [
-      totalTickets,
-      winningTickets,
-      unreadNotifications,
+      totalTicketsRes,
+      winningTicketsRes,
+      unreadNotificationsRes,
       dbUser,
-      referredUsers,
     ] = await Promise.all([
-      prisma.ticket.count({ where: { userId } }),
-      prisma.ticket.count({ where: { userId, isWinner: true } }),
-      prisma.notification.count({ where: { userId, isRead: false } }),
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: {
+      db.select({ count: count() }).from(ticket).where(eq(ticket.userId, userId)),
+      db
+        .select({ count: count() })
+        .from(ticket)
+        .where(and(eq(ticket.userId, userId), eq(ticket.isWinner, true))),
+      db
+        .select({ count: count() })
+        .from(notification)
+        .where(
+          and(eq(notification.userId, userId), eq(notification.isRead, false))
+        ),
+      db.query.user.findFirst({
+        where: eq(user.id, userId),
+        columns: {
           id: true,
           name: true,
           email: true,
@@ -48,16 +64,6 @@ export async function GET() {
           updatedAt: true,
         },
       }),
-      prisma.user.findMany({
-        where: { referredById: userId },
-        select: {
-          id: true,
-          name: true,
-          mobile: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: "desc" },
-      })
     ]);
 
     if (!dbUser) {
@@ -66,6 +72,10 @@ export async function GET() {
         { status: 404 }
       );
     }
+
+    const totalTickets = Number(totalTicketsRes[0]?.count ?? 0);
+    const winningTickets = Number(winningTicketsRes[0]?.count ?? 0);
+    const unreadNotifications = Number(unreadNotificationsRes[0]?.count ?? 0);
 
     return NextResponse.json({
       success: true,
@@ -93,7 +103,6 @@ export async function GET() {
         },
       },
     });
-
   } catch (error) {
     console.error("GET USER PROFILE ERROR:", error);
     return NextResponse.json(
@@ -103,19 +112,6 @@ export async function GET() {
   }
 }
 
-/* =====================================================
-   PATCH : Update Profile (NO Wallet / Referral edit)
-===================================================== */
-interface UserUpdateData {
-  name?: string;
-  adharcard?: string;
-  pancard?: string;
-  address?: string;
-  avatar?: string | null;
-  email?: string;
-  mobile?: string;
-  password?: string;
-}
 export async function PATCH(req: Request) {
   try {
     const authUser = await getCurrentUser();
@@ -138,8 +134,8 @@ export async function PATCH(req: Request) {
 
     /* ---------- Email ---------- */
     if (body.email) {
-      const existing = await prisma.user.findUnique({
-        where: { email: body.email },
+      const existing = await db.query.user.findFirst({
+        where: eq(user.email, body.email),
       });
 
       if (existing && existing.id.toString() !== authUser.id) {
@@ -154,8 +150,8 @@ export async function PATCH(req: Request) {
 
     /* ---------- Mobile ---------- */
     if (body.mobile) {
-      const existing = await prisma.user.findUnique({
-        where: { mobile: body.mobile },
+      const existing = await db.query.user.findFirst({
+        where: eq(user.mobile, body.mobile),
       });
 
       if (existing && existing.id.toString() !== authUser.id) {
@@ -177,9 +173,9 @@ export async function PATCH(req: Request) {
         );
       }
 
-      const dbUser = await prisma.user.findUnique({
-        where: { id: BigInt(authUser.id) },
-        select: { password: true },
+      const dbUser = await db.query.user.findFirst({
+        where: eq(user.id, BigInt(authUser.id)),
+        columns: { password: true },
       });
 
       if (
@@ -202,24 +198,24 @@ export async function PATCH(req: Request) {
       });
     }
 
-    const updatedUser = await prisma.user.update({
-      where: { id: BigInt(authUser.id) },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        mobile: true,
-        role: true,
-        avatar: true,
-        wallet: true,
-        adharcard: true,
-        pancard: true,
-        address: true,
-        referralCode: true,
-        createdAt: true,
-      },
-    });
+    const [updatedUser] = await db
+      .update(user)
+      .set(updateData)
+      .where(eq(user.id, BigInt(authUser.id)))
+      .returning({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        mobile: user.mobile,
+        role: user.role,
+        avatar: user.avatar,
+        wallet: user.wallet,
+        adharcard: user.adharcard,
+        pancard: user.pancard,
+        address: user.address,
+        referralCode: user.referralCode,
+        createdAt: user.createdAt,
+      });
 
     return NextResponse.json({
       success: true,
@@ -231,7 +227,6 @@ export async function PATCH(req: Request) {
         },
       },
     });
-
   } catch (error) {
     console.error("PATCH PROFILE ERROR:", error);
     return NextResponse.json(

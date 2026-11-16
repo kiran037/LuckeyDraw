@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { eq } from "drizzle-orm";
+import { db, user } from "@/db";
 
 export async function POST(req: Request) {
   try {
@@ -22,19 +23,19 @@ export async function POST(req: Request) {
     }
 
     /* ---------- FIND USER ---------- */
-    const user = await prisma.user.findUnique({
-      where: { mobile: body.mobile },
-      select: { id: true, password: true, isActive: true },
+    const foundUser = await db.query.user.findFirst({
+      where: eq(user.mobile, body.mobile),
+      columns: { id: true, password: true, isActive: true },
     });
 
-    if (!user) {
+    if (!foundUser) {
       return NextResponse.json(
         { success: false, message: "User not found" },
         { status: 404 }
       );
     }
 
-    if (!user.isActive) {
+    if (!foundUser.isActive) {
       return NextResponse.json(
         { success: false, message: "Account is deactivated" },
         { status: 403 }
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
     }
 
     /* ---------- VERIFY OLD PASSWORD ---------- */
-    const isMatch = await bcrypt.compare(body.oldPassword, user.password);
+    const isMatch = await bcrypt.compare(body.oldPassword, foundUser.password);
     if (!isMatch) {
       return NextResponse.json(
         { success: false, message: "Incorrect old password" },
@@ -53,16 +54,15 @@ export async function POST(req: Request) {
     /* ---------- UPDATE PASSWORD ---------- */
     const hashedPassword = await bcrypt.hash(body.newPassword, 10);
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { password: hashedPassword },
-    });
+    await db
+      .update(user)
+      .set({ password: hashedPassword })
+      .where(eq(user.id, foundUser.id));
 
     return NextResponse.json({
       success: true,
       message: "Password updated successfully! Please login.",
     });
-
   } catch (error) {
     console.error("Forgot Password Error:", error);
     return NextResponse.json(

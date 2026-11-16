@@ -1,54 +1,45 @@
-// src/app/api/user/draws/route.ts
+import { count, eq, lte, gt, and, or, inArray, desc, asc, SQL } from "drizzle-orm";
+import { db, draw, draw_status } from "@/db";
+import { jsonResponse, errorResponse } from "@/lib/api-utils";
 
-import { prisma } from '@/lib/prisma';
-import { jsonResponse, errorResponse } from '@/lib/api-utils';
-// 1. Add 'Prisma' to the imports here 👇
-import { Prisma, draw_status } from '@/generated/client/client';
-
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const tab = searchParams.get('tab') || 'live'; 
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
-    const limit = Math.max(1, parseInt(searchParams.get('limit') || '10'));
+    const tab = searchParams.get("tab") || "live";
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
+    const limit = Math.max(1, parseInt(searchParams.get("limit") || "10"));
     const skip = (page - 1) * limit;
 
     const now = new Date();
 
-    // 2. Change 'any' to 'Prisma.drawWhereInput' 👇
-    let whereClause: Prisma.drawWhereInput = {};
+    let whereClause: SQL | undefined = undefined;
 
     // --- Tab Logic ---
-    if (tab === 'live') {
-      whereClause = {
-        status: draw_status.LIVE,
-        startTime: { lte: now },
-        endTime: { gt: now },
-      };
-    } else if (tab === 'upcoming') {
-      whereClause = {
-        status: draw_status.LIVE,
-        startTime: { gt: now },
-      };
-    } else if (tab === 'closed') {
-      whereClause = {
-        OR: [
-          { status: { in: [draw_status.CLOSED, draw_status.RESULT_DECLARED] } },
-          { endTime: { lte: now } }
-        ]
-      };
+    if (tab === "live") {
+      whereClause = and(
+        eq(draw.status, draw_status.LIVE),
+        lte(draw.startTime, now),
+        gt(draw.endTime, now)
+      );
+    } else if (tab === "upcoming") {
+      whereClause = and(eq(draw.status, draw_status.LIVE), gt(draw.startTime, now));
+    } else if (tab === "closed") {
+      whereClause = or(
+        inArray(draw.status, [draw_status.CLOSED, draw_status.RESULT_DECLARED]),
+        lte(draw.endTime, now)
+      );
     }
 
-    // --- Parallel Fetching ---
-    const [draws, total] = await Promise.all([
-      prisma.draw.findMany({
+    const [totalRes, drawsList] = await Promise.all([
+      db.select({ count: count() }).from(draw).where(whereClause),
+      db.query.draw.findMany({
         where: whereClause,
-        skip,
-        take: limit,
-        orderBy: { startTime: tab === 'upcoming' ? 'asc' : 'desc' },
-        select: {
+        offset: skip,
+        limit,
+        orderBy: [tab === "upcoming" ? asc(draw.startTime) : desc(draw.startTime)],
+        columns: {
           id: true,
           title: true,
           bannerImage: true,
@@ -58,35 +49,48 @@ export async function GET(request: Request) {
           status: true,
           maxTickets: true,
           resultAt: true,
-          _count: {
-            select: { ticket: { where: { status: 'ACTIVE' } } }
+        },
+        with: {
+          tickets: {
+            columns: { id: true, status: true },
           },
-          drawproduct: {
-            take: 1,
-            select: { name: true, image: true }
-          }
-        }
+          drawproducts: {
+            limit: 1,
+            columns: { name: true, image: true },
+          },
+        },
       }),
-      prisma.draw.count({ where: whereClause })
     ]);
 
-    // --- Format Data ---
-    const formattedDraws = draws.map((draw) => {
-      const sold = draw._count.ticket;
-      const total = draw.maxTickets || 1;
-      const progress = Math.min(Math.round((sold / total) * 100), 100);
+    const total = Number(totalRes[0]?.count ?? 0);
+
+    const formattedDraws = drawsList.map((d) => {
+      const activeTickets = (d.tickets || []).filter(
+        (t) => t.status === "ACTIVE"
+      );
+      const sold = activeTickets.length;
+      const totalTickets = d.maxTickets || 1;
+      const progress = Math.min(Math.round((sold / totalTickets) * 100), 100);
 
       return {
-        ...draw,
-        stats: { sold, total, progress }
+        id: d.id,
+        title: d.title,
+        bannerImage: d.bannerImage,
+        entryFee: d.entryFee,
+        startTime: d.startTime,
+        endTime: d.endTime,
+        status: d.status,
+        maxTickets: d.maxTickets,
+        resultAt: d.resultAt,
+        drawproduct: d.drawproducts || [],
+        stats: { sold, total: totalTickets, progress },
       };
     });
 
     return jsonResponse({
       draws: formattedDraws,
-      pagination: { total, page, pages: Math.ceil(total / limit) }
+      pagination: { total, page, pages: Math.ceil(total / limit) },
     });
-
   } catch (error) {
     console.error("GET DRAWS ERROR:", error);
     return errorResponse("Failed to fetch draws", 500);

@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
+import { count, eq, or, ilike, and, desc, SQL } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db, user, user_role } from "@/db";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
-import { Prisma, user_role } from "@/generated/client/client";
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,28 +15,32 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
     const role = searchParams.get("role") as user_role | undefined;
 
-    const where: Prisma.userWhereInput = {};
+    const conditions: SQL[] = [];
 
     if (role && Object.values(user_role).includes(role)) {
-      where.role = role;
+      conditions.push(eq(user.role, role));
     }
 
     if (search) {
-      where.OR = [
-        { name: { contains: search } },
-        { email: { contains: search } },
-        { mobile: { contains: search } },
-      ];
+      conditions.push(
+        or(
+          ilike(user.name, `%${search}%`),
+          ilike(user.email, `%${search}%`),
+          ilike(user.mobile, `%${search}%`)
+        )!
+      );
     }
 
-    const [total, users] = await prisma.$transaction([
-      prisma.user.count({ where }),
-      prisma.user.findMany({
-        where,
-        take: limit,
-        skip: (page - 1) * limit,
-        orderBy: { createdAt: "desc" },
-        select: {
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [totalRes, usersList] = await Promise.all([
+      db.select({ count: count() }).from(user).where(whereClause),
+      db.query.user.findMany({
+        where: whereClause,
+        limit,
+        offset: (page - 1) * limit,
+        orderBy: [desc(user.createdAt)],
+        columns: {
           id: true,
           name: true,
           email: true,
@@ -49,6 +53,8 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
+    const total = Number(totalRes[0]?.count ?? 0);
+
     return jsonResponse({
       meta: {
         total,
@@ -56,7 +62,7 @@ export async function GET(request: NextRequest) {
         limit,
         totalPages: Math.ceil(total / limit),
       },
-      users,
+      users: usersList,
     });
   } catch (error) {
     console.error("ADMIN GET USERS ERROR:", error);

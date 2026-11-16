@@ -1,27 +1,24 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma"; // Adjust path if needed
-import { requireAdmin } from "@/lib/auth"; // Adjust path if needed
-import { jsonResponse, errorResponse } from "@/lib/api-utils"; // Adjust path if needed
+import { eq, desc } from "drizzle-orm";
+import { db, winner } from "@/db";
+import { requireAdmin } from "@/lib/auth";
+import { jsonResponse, errorResponse } from "@/lib/api-utils";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // 1. Check Admin Auth
     const admin = await requireAdmin();
     if (!admin) return errorResponse("Unauthorized", 401);
 
     const { id } = await params;
 
-    // 2. Fetch Winners with details
-    const winners = await prisma.winner.findMany({
-      where: {
-        drawId: BigInt(id),
-      },
-      include: {
+    const winners = await db.query.winner.findMany({
+      where: eq(winner.drawId, BigInt(id)),
+      with: {
         user: {
-          select: {
+          columns: {
             id: true,
             name: true,
             email: true,
@@ -29,25 +26,21 @@ export async function GET(
           },
         },
         ticket: {
-          select: {
+          columns: {
             ticketCode: true,
           },
         },
         drawproduct: {
-          select: {
+          columns: {
             name: true,
             image: true,
           },
         },
       },
-      orderBy: {
-        declaredAt: 'desc',
-      },
+      orderBy: [desc(winner.declaredAt)],
     });
 
-    // 3. Serialize BigInts before sending
     return jsonResponse({ winners });
-    
   } catch (error: unknown) {
     console.error("Error fetching winners:", error);
     return errorResponse("Failed to fetch winners", 500);

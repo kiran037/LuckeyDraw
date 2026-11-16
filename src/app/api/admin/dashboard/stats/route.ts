@@ -1,8 +1,16 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { count, sum, gte, eq, and } from "drizzle-orm";
+import {
+  db,
+  user,
+  draw,
+  ticket,
+  payment,
+  payment_status,
+  draw_status,
+} from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { jsonResponse, errorResponse } from "@/lib/api-utils";
-import { payment_status, draw_status } from "@/generated/client/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,54 +19,44 @@ export async function GET(req: NextRequest) {
 
     // Date calculations
     const now = new Date();
-    const startOfDay = new Date(now.setHours(0, 0, 0, 0));
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
 
-    // Run queries in parallel for performance
     const [
-      totalUsers, 
-      newUsersToday,
-      activeDraws,
-      totalTickets,
-      ticketsToday,
-      pendingPayments,
-      revenueStats
-    ] = await prisma.$transaction([
-      // 1. User Counts
-      prisma.user.count(),
-      prisma.user.count({ where: { createdAt: { gte: startOfDay } } }),
-
-      // 2. Active Draws (Live)
-      prisma.draw.count({ where: { status: draw_status.LIVE } }),
-
-      // 3. Ticket Counts
-      prisma.ticket.count(),
-      prisma.ticket.count({ where: { createdAt: { gte: startOfDay } } }),
-
-      // 4. Action Item: Pending Payments (Critical for Admin)
-      prisma.payment.count({ where: { status: payment_status.PENDING } }),
-
-      // 5. Revenue Aggregation (Total & Monthly)
-      prisma.payment.aggregate({
-        _sum: { amount: true },
-        where: { status: payment_status.APPROVED }
-      })
+      totalUsersRes,
+      newUsersTodayRes,
+      activeDrawsRes,
+      totalTicketsRes,
+      ticketsTodayRes,
+      pendingPaymentsRes,
+      revenueStatsRes,
+      todayRevenueRes,
+    ] = await Promise.all([
+      db.select({ val: count() }).from(user),
+      db.select({ val: count() }).from(user).where(gte(user.createdAt, startOfDay)),
+      db.select({ val: count() }).from(draw).where(eq(draw.status, draw_status.LIVE)),
+      db.select({ val: count() }).from(ticket),
+      db.select({ val: count() }).from(ticket).where(gte(ticket.createdAt, startOfDay)),
+      db.select({ val: count() }).from(payment).where(eq(payment.status, payment_status.PENDING)),
+      db.select({ total: sum(payment.amount) }).from(payment).where(eq(payment.status, payment_status.APPROVED)),
+      db.select({ total: sum(payment.amount) }).from(payment).where(
+        and(eq(payment.status, payment_status.APPROVED), gte(payment.createdAt, startOfDay))
+      ),
     ]);
 
-    // Calculate Today's Revenue separately (cleaner query)
-    const todayRevenueAgg = await prisma.payment.aggregate({
-      _sum: { amount: true },
-      where: { 
-        status: payment_status.APPROVED,
-        createdAt: { gte: startOfDay }
-      }
-    });
+    const totalUsers = Number(totalUsersRes[0]?.val ?? 0);
+    const newUsersToday = Number(newUsersTodayRes[0]?.val ?? 0);
+    const activeDraws = Number(activeDrawsRes[0]?.val ?? 0);
+    const totalTickets = Number(totalTicketsRes[0]?.val ?? 0);
+    const ticketsToday = Number(ticketsTodayRes[0]?.val ?? 0);
+    const pendingPayments = Number(pendingPaymentsRes[0]?.val ?? 0);
+    const totalRevenue = Number(revenueStatsRes[0]?.total ?? 0);
+    const todayRevenue = Number(todayRevenueRes[0]?.total ?? 0);
 
     return jsonResponse({
       kpi: {
         revenue: {
-          total: revenueStats._sum.amount || 0,
-          today: todayRevenueAgg._sum.amount || 0,
+          total: totalRevenue,
+          today: todayRevenue,
         },
         users: {
           total: totalUsers,
@@ -72,11 +70,10 @@ export async function GET(req: NextRequest) {
           active: activeDraws,
         },
         actionItems: {
-          pendingPayments: pendingPayments, // Use this for a Red Badge on your UI
-        }
-      }
+          pendingPayments: pendingPayments,
+        },
+      },
     });
-
   } catch (err) {
     console.error("ADMIN DASHBOARD STATS ERROR:", err);
     return errorResponse("Failed to load dashboard stats", 500);

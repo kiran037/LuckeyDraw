@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { eq, desc } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db, walletTransaction } from "@/db";
 
 export async function GET() {
   try {
@@ -12,15 +13,15 @@ export async function GET() {
       );
     }
 
-    const txs = await prisma.walletTransaction.findMany({
-      where: { userId: BigInt(user.id) },
-      orderBy: { createdAt: "desc" },
-      take: 50,
+    const txs = await db.query.walletTransaction.findMany({
+      where: eq(walletTransaction.userId, BigInt(user.id)),
+      orderBy: [desc(walletTransaction.createdAt)],
+      limit: 50,
     });
 
     return NextResponse.json({
       success: true,
-      data: txs.map(t => ({
+      data: txs.map((t) => ({
         id: t.id.toString(),
         amount: t.amount,
         balanceAfter: t.balanceAfter,
