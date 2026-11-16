@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api-client';
 import { Draw, Ticket } from '@/lib/types';
 
@@ -8,6 +9,7 @@ import { Draw, Ticket } from '@/lib/types';
 import { PageLoader, PageError } from '@/components/LandingUI/HomePrimitives';
 import Header from '@/components/LandingUI/Header/Header';
 import BottomNav from '@/components/LandingUI/BottomNav';
+import Footer from '@/components/LandingUI/Footer';
 
 // Feature Components
 import HeroCarousel from '@/components/LandingUI/User/home/HeroCarousel';
@@ -111,24 +113,27 @@ export default function HomePage() {
               <WinnersLeaderboard winners={data.recentWinners} />
             </section>
             
-            <section className="bg-white dark:bg-[#151925] rounded-3xl p-6 sm:p-8 border border-gray-100 dark:border-white/5 shadow-sm">
+            <section id="how-it-works" className="bg-white dark:bg-[#0F1626] rounded-3xl p-6 sm:p-8 border border-slate-200/80 dark:border-white/[0.08] shadow-xs scroll-mt-24">
               <HowItWorks />
             </section>
           </div>
 
           {/* Right: Support & FAQ (4 cols) */}
           <div className="lg:col-span-4 space-y-6">
-            <div className="bg-gradient-to-br from-purple-600 to-indigo-600 rounded-3xl p-6 text-white shadow-xl shadow-purple-500/20">
-              <h3 className="font-bold text-lg mb-2">Need Assistance?</h3>
-              <p className="text-sm text-purple-100 mb-4 leading-relaxed">
-                Our support team is available 24/7 to help you with payments or tickets.
+            <div className="bg-gradient-to-br from-primary via-indigo-600 to-purple-700 rounded-3xl p-6 text-white shadow-xl shadow-primary/20">
+              <h3 className="font-black text-lg mb-2">Need Assistance?</h3>
+              <p className="text-xs sm:text-sm text-indigo-100 mb-4 leading-relaxed font-normal">
+                Our support team is available 24/7 to help you with instant payment confirmations or ticket verification.
               </p>
-              <button className="w-full py-3 bg-white text-purple-600 font-bold rounded-xl text-sm hover:bg-purple-50 transition-colors">
-                Chat Support
-              </button>
+              <Link
+                href="/user/notifications"
+                className="w-full py-3 bg-white text-primary font-bold rounded-xl text-xs sm:text-sm hover:bg-slate-50 active:scale-95 transition-all text-center block shadow-sm"
+              >
+                Support Center & Inquiries
+              </Link>
             </div>
 
-            <section>
+            <section id="faq" className="scroll-mt-24">
                <FAQSection />
             </section>
           </div>
@@ -136,6 +141,7 @@ export default function HomePage() {
 
       </main>
 
+      <Footer />
       <BottomNav />
     </div>
   );

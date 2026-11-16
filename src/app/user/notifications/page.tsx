@@ -2,11 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/utils';
-import { Bell, CheckCircle2, Clock, ChevronLeft, Loader2, Inbox, RefreshCw, CheckCheck } from 'lucide-react';
+import {
+  Bell, Clock, ChevronLeft, Loader2,
+  Inbox, RefreshCw, CheckCheck, Sparkles, Trophy, Wallet, ShieldAlert
+} from 'lucide-react';
 
-// --- Types ---
 interface Notification {
   id: string;
   userId: string;
@@ -18,8 +21,7 @@ interface Notification {
 
 export default function NotificationsPage() {
   const router = useRouter();
-  
-  // 1. State Declarations
+
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -29,9 +31,11 @@ export default function NotificationsPage() {
   const loadNotifications = useCallback(async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      const response = await api.get<{ notifications: Notification[]; unreadCount: number }>('/user/notifications');
+      const response = await api.get<{ notifications: Notification[]; unreadCount: number }>(
+        '/user/notifications'
+      );
 
       if (!response.success) {
         setError(response.message || 'Failed to load notifications');
@@ -40,64 +44,69 @@ export default function NotificationsPage() {
         setUnreadCount(response.data?.unreadCount || 0);
       }
     } catch {
-      setError('An unexpected error occurred');
+      setError('An unexpected error occurred while loading notifications');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // 3. useEffect calls the function AFTER it is defined
   useEffect(() => {
     loadNotifications();
   }, [loadNotifications]);
 
-  // 4. Action Handlers
   async function markAsRead(notificationId: string) {
-    // Optimistic UI Update
     setNotifications((prev) =>
       prev.map((n) => (n.id === notificationId ? { ...n, isRead: true } : n))
     );
     setUnreadCount((prev) => Math.max(0, prev - 1));
-
-    // API Call
     await api.patch('/user/notifications', { notificationId });
   }
 
   async function markAllAsRead() {
     if (unreadCount === 0) return;
     setMarkingAll(true);
-    
-    // Optimistic Update
-    setNotifications((prev) => prev.map(n => ({ ...n, isRead: true })));
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
     setUnreadCount(0);
-
-    // API Call
     await api.patch('/user/notifications', {});
     setMarkingAll(false);
   }
 
-  // --- Loading State ---
+  const getNotificationIcon = (title: string) => {
+    const lower = title.toLowerCase();
+    if (lower.includes('winner') || lower.includes('won') || lower.includes('congrat')) {
+      return <Trophy size={18} className="text-amber-400" />;
+    }
+    if (lower.includes('wallet') || lower.includes('payment') || lower.includes('cash')) {
+      return <Wallet size={18} className="text-emerald-400" />;
+    }
+    if (lower.includes('security') || lower.includes('alert') || lower.includes('failed')) {
+      return <ShieldAlert size={18} className="text-rose-400" />;
+    }
+    return <Bell size={18} className="text-indigo-400" />;
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-[#09090b] flex flex-col items-center justify-center space-y-4">
-        <Loader2 className="w-10 h-10 text-purple-600 animate-spin" />
-        <p className="text-sm font-medium text-gray-500 animate-pulse">Checking for updates...</p>
+      <div className="flex flex-col items-center justify-center py-24 space-y-4">
+        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+        </div>
+        <p className="text-sm font-semibold text-slate-400">Loading notifications...</p>
       </div>
     );
   }
 
-  // --- Error State ---
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-[#09090b] flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-4">
-          <Bell className="w-8 h-8 text-red-500" />
+      <div className="max-w-md mx-auto py-16 text-center">
+        <div className="w-14 h-14 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <Bell className="w-7 h-7 text-rose-500" />
         </div>
-        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Oops! Something went wrong</h3>
-        <p className="text-sm text-gray-500 mt-2 mb-6 max-w-xs">{error}</p>
-        <button 
+        <h3 className="text-lg font-bold text-white mb-2">Error Loading Updates</h3>
+        <p className="text-sm text-slate-400 mb-6">{error}</p>
+        <button
           onClick={loadNotifications}
-          className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-black font-bold rounded-full hover:scale-105 transition-transform"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition-all"
         >
           <RefreshCw size={16} /> Try Again
         </button>
@@ -105,158 +114,125 @@ export default function NotificationsPage() {
     );
   }
 
-  // --- Main UI ---
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#09090b] text-gray-900 dark:text-white pb-24 font-sans overflow-x-hidden transition-colors duration-300">
-      
-      {/* Background Glow (Dark Mode Only) */}
-      <div className="fixed inset-0 z-0 pointer-events-none select-none hidden dark:block">
-        <div className="absolute top-[-10%] right-[-20%] w-[500px] h-[500px] bg-purple-900/10 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[20%] left-[-10%] w-[400px] h-[400px] bg-blue-900/10 rounded-full blur-[100px]" />
-      </div>
-
-      <div className="relative z-10 max-w-2xl mx-auto px-4 sm:px-6 pt-4 sm:pt-8">
-        
-        {/* === HEADER === */}
-        <div className="flex justify-between items-center mb-6 sm:mb-8 sticky top-4 z-20 bg-white/80 dark:bg-[#09090b]/80 backdrop-blur-xl p-3 sm:p-4 rounded-2xl border border-gray-200 dark:border-white/5 shadow-lg sm:shadow-2xl transition-all">
-          <div className="flex items-center gap-3 sm:gap-4">
-             {/* Back Button */}
-             <button 
-               onClick={() => router.back()}
-               className="
-                 flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-300
-                 bg-gray-100 dark:bg-[#151925] border border-gray-200 dark:border-white/10 
-                 hover:bg-gray-200 dark:hover:bg-white/5 active:scale-95
-               "
-             >
-               <ChevronLeft size={20} className="text-gray-600 dark:text-gray-400" />
-             </button>
-             
-             <div>
-                <h1 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white tracking-tight">Notifications</h1>
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Updates & Alerts</p>
-             </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {/* Mark All Read Button */}
-            {unreadCount > 0 && (
-              <button 
-                onClick={markAllAsRead}
-                disabled={markingAll}
-                className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 px-3 py-1.5 rounded-lg transition-colors"
-              >
-                {markingAll ? <Loader2 size={14} className="animate-spin" /> : <CheckCheck size={14} />}
-                Mark all read
-              </button>
-            )}
-
-            {/* Bell Icon with Badge */}
-            <div className="relative">
-              <div className="w-10 h-10 bg-gray-100 dark:bg-[#151925] rounded-xl border border-gray-200 dark:border-white/5 flex items-center justify-center text-gray-600 dark:text-purple-400 shadow-inner">
-                <Bell size={20} />
-              </div>
+    <div className="max-w-2xl mx-auto space-y-6">
+      {/* Top Header */}
+      <div className="flex items-center justify-between pb-2 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.back()}
+            className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-900/60 dark:bg-slate-900/80 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white transition-all active:scale-95"
+            aria-label="Go back"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+              Notifications
               {unreadCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold h-5 min-w-[1.25rem] px-1 flex items-center justify-center rounded-full border-2 border-white dark:border-[#09090b] shadow-sm animate-in zoom-in">
-                  {unreadCount}
+                <span className="text-xs font-black px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  {unreadCount} New
                 </span>
               )}
-            </div>
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Draw results, transaction confirmations & account alerts
+            </p>
           </div>
         </div>
 
-        {/* Mobile "Mark all read" (Visible only on small screens) */}
         {unreadCount > 0 && (
-          <div className="flex sm:hidden justify-end mb-4 px-1">
-             <button 
-                onClick={markAllAsRead}
-                disabled={markingAll}
-                className="text-xs font-bold text-purple-600 dark:text-purple-400 flex items-center gap-1 active:opacity-70"
-              >
-                {markingAll ? <Loader2 size={12} className="animate-spin" /> : <CheckCheck size={12} />}
-                Mark all as read
-              </button>
-          </div>
+          <button
+            onClick={markAllAsRead}
+            disabled={markingAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 text-xs font-bold text-indigo-400 transition-all active:scale-95"
+          >
+            {markingAll ? <Loader2 size={13} className="animate-spin" /> : <CheckCheck size={13} />}
+            <span>Mark all read</span>
+          </button>
         )}
+      </div>
 
-        {/* === LIST CONTENT === */}
-        {notifications.length === 0 ? (
-          /* Empty State Inline */
-          <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in zoom-in duration-500">
-             <div className="w-20 h-20 bg-gray-100 dark:bg-[#151925] rounded-full flex items-center justify-center mb-4">
-                <Inbox size={32} className="text-gray-400 dark:text-gray-600" />
-             </div>
-             <h3 className="text-lg font-bold text-gray-900 dark:text-white">All caught up!</h3>
-             <p className="text-sm text-gray-500 mt-2 max-w-[250px]">
-               You don't have any notifications yet. We'll notify you about important updates!
-             </p>
-             <button 
-               onClick={() => router.push('/user/draws')}
-               className="mt-6 px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-full transition-all shadow-lg shadow-purple-500/20 active:scale-95"
-             >
-               Browse Draws
-             </button>
+      {/* Notifications List */}
+      {notifications.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 bg-white/40 dark:bg-slate-900/40 rounded-3xl border-2 border-dashed border-slate-200 dark:border-white/10 text-center px-4">
+          <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4">
+            <Inbox size={28} />
           </div>
-        ) : (
-          <div className="space-y-3 sm:space-y-4 pb-10">
-            {notifications.map((notification, index) => {
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">You're All Caught Up!</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mt-1 mb-6">
+            When you purchase tickets or win draws, real-time alerts will appear right here.
+          </p>
+          <button
+            onClick={() => router.push('/user/draws')}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg transition-all"
+          >
+            <Sparkles size={14} /> Explore Active Draws
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <AnimatePresence>
+            {notifications.map((notification) => {
               const isUnread = !notification.isRead;
-              
               return (
-                <div
+                <motion.div
                   key={notification.id}
+                  layout
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
                   onClick={() => isUnread && markAsRead(notification.id)}
-                  className={`
-                    group relative p-4 sm:p-5 rounded-2xl border transition-all duration-300 cursor-pointer overflow-hidden
-                    animate-in slide-in-from-bottom-2 fade-in
-                    ${isUnread
-                      ? 'bg-white dark:bg-[#151925] border-purple-200 dark:border-purple-500/30 shadow-lg shadow-purple-500/5 dark:shadow-[0_4px_20px_-5px_rgba(168,85,247,0.15)]'
-                      : 'bg-white/50 dark:bg-[#0f1116] border-gray-100 dark:border-white/5 opacity-80 hover:opacity-100 hover:bg-white dark:hover:bg-[#151925]'}
-                  `}
-                  style={{ animationDelay: `${index * 50}ms` }}
+                  className={`group relative p-4 sm:p-5 rounded-2xl border transition-all duration-300 cursor-pointer overflow-hidden ${
+                    isUnread
+                      ? 'bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 border-indigo-500/40 shadow-lg shadow-indigo-500/5'
+                      : 'bg-white dark:bg-slate-900/60 border-slate-200 dark:border-white/5 opacity-85 hover:opacity-100 hover:border-white/15'
+                  }`}
                 >
-                  {/* Unread Glow Indicator (Dark Mode Only) */}
-                  {isUnread && (
-                    <div className="hidden dark:block absolute top-0 right-0 w-20 h-20 bg-purple-500/10 rounded-bl-[100px] blur-xl pointer-events-none" />
-                  )}
-
-                  <div className="flex gap-3 sm:gap-4 relative z-10">
-                    {/* Icon Box */}
-                    <div className={`
-                      w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 transition-colors
-                      ${isUnread 
-                        ? 'bg-purple-100 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20' 
-                        : 'bg-gray-100 dark:bg-[#1a1e29] text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-white/5'}
-                    `}>
-                      {isUnread ? <Bell size={18} className="sm:w-5 sm:h-5 animate-pulse" /> : <CheckCircle2 size={18} className="sm:w-5 sm:h-5" />}
+                  <div className="flex items-start gap-3.5">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                        isUnread
+                          ? 'bg-indigo-500/15 border-indigo-500/30'
+                          : 'bg-white/5 border-white/10'
+                      }`}
+                    >
+                      {getNotificationIcon(notification.title)}
                     </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-start gap-2">
-                        <h3 className={`font-bold text-xs sm:text-sm mb-1 truncate pr-2 ${isUnread ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'}`}>
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4
+                          className={`text-sm font-bold truncate ${
+                            isUnread ? 'text-white' : 'text-slate-300'
+                          }`}
+                        >
                           {notification.title}
-                        </h3>
+                        </h4>
                         {isUnread && (
-                          <span className="w-2 h-2 rounded-full bg-purple-600 dark:bg-purple-500 shadow-[0_0_8px_currentColor] shrink-0 mt-1.5" />
+                          <span className="w-2 h-2 rounded-full bg-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.8)] shrink-0" />
                         )}
                       </div>
-                      
-                      <p className={`text-xs leading-relaxed mb-2 sm:mb-3 line-clamp-2 ${isUnread ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 dark:text-gray-600'}`}>
+
+                      <p
+                        className={`text-xs leading-relaxed ${
+                          isUnread ? 'text-slate-300' : 'text-slate-400'
+                        }`}
+                      >
                         {notification.message}
                       </p>
 
-                      <div className="flex items-center gap-1.5 text-[10px] font-medium text-gray-500 dark:text-gray-500 bg-gray-100 dark:bg-white/5 w-fit px-2 py-1 rounded-md border border-gray-200 dark:border-white/5">
-                        <Clock size={10} />
-                        {formatDateTime(notification.createdAt)}
+                      <div className="flex items-center gap-1 text-[10px] text-slate-500 pt-1">
+                        <Clock size={11} />
+                        <span>{formatDateTime(notification.createdAt)}</span>
                       </div>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
-          </div>
-        )}
-      </div>
+          </AnimatePresence>
+        </div>
+      )}
     </div>
   );
 }

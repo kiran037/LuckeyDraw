@@ -4,9 +4,19 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api-client';
 import { formatCurrency } from '@/lib/utils';
-import { 
-  Clock, Trophy, CheckCircle, Loader2, AlertCircle, Ticket, 
-  ChevronLeft, Share2, Info, Users, Crown 
+import {
+  Clock,
+  Trophy,
+  CheckCircle,
+  Loader2,
+  AlertCircle,
+  Ticket,
+  ChevronLeft,
+  Share2,
+  Info,
+  Users,
+  Crown,
+  ShieldCheck,
 } from 'lucide-react';
 import { getImageUrl } from '@/lib/image-helper';
 
@@ -38,18 +48,20 @@ interface DrawDetails {
     name: string;
     image: string | null;
     quantity: number;
+    description?: string | null;
   }>;
 }
 
 export default function DrawDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  
+
   const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
-  
+
   const [draw, setDraw] = useState<DrawDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copiedShare, setCopiedShare] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -58,14 +70,14 @@ export default function DrawDetailsPage() {
       try {
         setLoading(true);
         const res = await api.get<DrawDetails>(`/user/draws/${id}`);
-        
+
         if (res.success && res.data) {
           setDraw(res.data);
         } else {
-          setError(res.message || "Failed to load draw details");
+          setError(res.message || 'Failed to load draw details');
         }
       } catch {
-        setError("Network error occurred");
+        setError('Network error occurred');
       } finally {
         setLoading(false);
       }
@@ -73,51 +85,72 @@ export default function DrawDetailsPage() {
     fetchDetails();
   }, [id]);
 
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: draw?.title || 'Lucky Draw',
+          text: `Check out this verified draw on Sawariya! Win amazing prizes!`,
+          url: window.location.href,
+        });
+      } catch {
+        // Ignored
+      }
+    } else {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopiedShare(true);
+      setTimeout(() => setCopiedShare(false), 2000);
+    }
+  };
+
   const formatDate = (dateString: string | undefined) => {
-    if (!dateString) return "TBA";
+    if (!dateString) return 'TBA';
     try {
       return new Date(dateString).toLocaleDateString(undefined, {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
       });
     } catch {
-      return "Invalid Date";
+      return 'Invalid Date';
     }
   };
 
-  // --- Loading State ---
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-[#09090b] flex flex-col items-center justify-center gap-4">
-        <Loader2 className="w-10 h-10 text-purple-600 animate-spin" />
-        <p className="text-gray-500 animate-pulse font-medium">Loading details...</p>
+      <div className="min-h-[50vh] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <p className="text-xs uppercase tracking-widest text-slate-400 font-bold">
+          Loading Draw Details...
+        </p>
       </div>
     );
   }
-  
-  // --- Error State ---
+
   if (error || !draw) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-[#09090b] flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-4">
+      <div className="min-h-[50vh] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 bg-red-50 dark:bg-red-500/10 rounded-2xl flex items-center justify-center mb-4 border border-red-200 dark:border-red-500/20">
           <AlertCircle className="w-8 h-8 text-red-500" />
         </div>
-        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Draw Not Found</h3>
-        <p className="text-sm text-gray-500 mt-2 mb-6">{error || "This draw may have been removed."}</p>
-        <button 
+        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">
+          Draw Not Found
+        </h3>
+        <p className="text-sm text-slate-500 mb-6">
+          {error || 'This contest might have ended or been closed.'}
+        </p>
+        <button
           onClick={() => router.push('/user/draws')}
-          className="px-6 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-black font-bold rounded-full transition-transform hover:scale-105"
+          className="px-6 py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl text-xs sm:text-sm hover:opacity-90 active:scale-95 transition-all shadow-sm"
         >
-          Browse Draws
+          Explore Other Draws
         </button>
       </div>
     );
   }
 
-  // Safe Defaults
   const soldCount = draw.stats?.sold ?? 0;
   const leftCount = draw.stats?.left ?? 0;
   const progressPercent = draw.stats?.progress ?? 0;
@@ -125,178 +158,319 @@ export default function DrawDetailsPage() {
   const isLive = draw.status === 'LIVE';
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#09090b] text-gray-900 dark:text-white pb-32 transition-colors duration-300">
-      
-      {/* Hero Header */}
-      <div className="relative h-64 sm:h-96 w-full bg-gray-900 overflow-hidden">
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
+      {/* Top Navigation Row */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-[#0F1626] border border-slate-200/80 dark:border-white/[0.08] text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 active:scale-95 transition-all shadow-xs"
+        >
+          <ChevronLeft size={16} />
+          <span>Back</span>
+        </button>
+
+        <button
+          onClick={handleShare}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-[#0F1626] border border-slate-200/80 dark:border-white/[0.08] text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 active:scale-95 transition-all shadow-xs"
+        >
+          <Share2 size={15} />
+          <span>{copiedShare ? 'Copied Link!' : 'Share'}</span>
+        </button>
+      </div>
+
+      {/* Hero Banner Area */}
+      <div className="relative rounded-3xl overflow-hidden bg-slate-950 border border-slate-200/80 dark:border-white/[0.08] min-h-[260px] sm:min-h-[360px] md:min-h-[400px] flex items-end shadow-md">
         {draw.bannerImage ? (
-          <img src={getImageUrl(draw.bannerImage)} alt={draw.title} className="w-full h-full object-cover opacity-90" />
+          <img
+            src={getImageUrl(draw.bannerImage)}
+            alt={draw.title}
+            className="absolute inset-0 w-full h-full object-cover opacity-85"
+          />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900 to-indigo-900">
-            <Trophy size={64} className="text-white/20" />
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 to-slate-950 flex items-center justify-center">
+            <Trophy size={64} className="text-white/10" />
           </div>
         )}
-        
-        {/* Header Actions */}
-        <div className="absolute top-0 left-0 right-0 p-4 sm:p-6 flex justify-between items-center z-10">
-           <button 
-             onClick={() => router.back()}
-             className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/20 backdrop-blur-md border border-white/20 text-white hover:bg-white/30 transition-colors"
-           >
-             <ChevronLeft size={20} />
-           </button>
-           
-           <div className="flex gap-2">
-             <button className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/20 backdrop-blur-md border border-white/20 text-white hover:bg-white/30 transition-colors">
-               <Share2 size={18} />
-             </button>
-           </div>
-        </div>
 
-        {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-50 dark:from-[#09090b] via-transparent to-black/30" />
-      </div>
+        {/* Gradient Mask */}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent" />
 
-      {/* Main Content Card - Floats over Hero */}
-      <div className="max-w-4xl mx-auto px-4 -mt-16 sm:-mt-24 relative z-10">
-        <div className="bg-white dark:bg-[#151925] rounded-[2rem] p-6 sm:p-8 border border-gray-200 dark:border-white/5 shadow-xl transition-colors duration-300">
-          
-          {/* Status Chip */}
-          <div className="flex items-center gap-3 mb-4">
-             <span className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 ${
-               isLive ? 'bg-green-100 text-green-700 border-green-200 dark:bg-green-500/20 dark:text-green-400 dark:border-green-500/30' 
-               : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
-             }`}>
-               <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-               {draw.status}
-             </span>
-             {draw.userStatus?.hasJoined && (
-               <span className="px-3 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700 border border-yellow-200 dark:bg-yellow-500/20 dark:text-yellow-400 dark:border-yellow-500/30 flex items-center gap-1">
-                 <CheckCircle size={12} /> Joined
-               </span>
-             )}
+        {/* Banner Overlay Badge & Title */}
+        <div className="relative z-10 p-6 sm:p-8 md:p-10 w-full space-y-2 sm:space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border shadow-xs flex items-center gap-1.5 ${
+                isLive
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                  : 'bg-white/10 text-slate-300 border-white/10'
+              }`}
+            >
+              {isLive && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              )}
+              {draw.status}
+            </span>
+
+            {draw.userStatus?.hasJoined && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30 flex items-center gap-1">
+                <CheckCircle size={13} /> Ticket Booked
+              </span>
+            )}
           </div>
 
-          <h1 className="text-2xl sm:text-4xl font-black mb-3 leading-tight">{draw.title}</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed mb-8">{draw.description || "Join this exciting draw for a chance to win amazing prizes!"}</p>
+          <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight">
+            {draw.title}
+          </h1>
+        </div>
+      </div>
 
-          {/* Key Stats Grid */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-6 mb-8">
-            <div className="bg-gray-50 dark:bg-[#0B0E14] p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-white/5">
-              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Entry Fee</p>
-              <p className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white">{formatCurrency(draw.entryFee)}</p>
+      {/* Main Details Body */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
+        {/* Left Column (8 cols): Description, Key Stats, Prizes, Rules */}
+        <div className="lg:col-span-8 space-y-6">
+          {/* Key Metrics Bento */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+            <div className="bg-white dark:bg-[#0F1626] p-4 sm:p-5 rounded-2xl border border-slate-200/80 dark:border-white/[0.08] shadow-xs">
+              <p className="text-[10px] text-slate-400 uppercase font-black tracking-wider mb-1">
+                Entry Fee
+              </p>
+              <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                {formatCurrency(draw.entryFee)}
+              </p>
             </div>
-            <div className="bg-gray-50 dark:bg-[#0B0E14] p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-white/5">
-              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Draw Date</p>
+
+            <div className="bg-white dark:bg-[#0F1626] p-4 sm:p-5 rounded-2xl border border-slate-200/80 dark:border-white/[0.08] shadow-xs">
+              <p className="text-[10px] text-slate-400 uppercase font-black tracking-wider mb-1">
+                Draw Closing Date
+              </p>
+              <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                {formatDate(draw.endTime)}
+              </p>
+            </div>
+
+            <div className="col-span-2 sm:col-span-1 bg-white dark:bg-[#0F1626] p-4 sm:p-5 rounded-2xl border border-slate-200/80 dark:border-white/[0.08] shadow-xs">
+              <p className="text-[10px] text-slate-400 uppercase font-black tracking-wider mb-1">
+                Max Capacity
+              </p>
+              <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                {draw.maxTickets} Tickets
+              </p>
+            </div>
+          </div>
+
+          {/* Ticket Fill Progress */}
+          <div className="bg-white dark:bg-[#0F1626] p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-white/[0.08] shadow-xs space-y-3">
+            <div className="flex justify-between items-center text-xs sm:text-sm font-bold">
+              <div className="flex items-center gap-2 text-slate-900 dark:text-white">
+                <Users size={16} className="text-primary" />
+                <span>
+                  {soldCount}{' '}
+                  <span className="text-slate-400 font-normal">tickets booked</span>
+                </span>
+              </div>
+              <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full">
+                {leftCount} remaining
+              </span>
+            </div>
+
+            <div className="h-3 w-full bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-primary to-indigo-500 rounded-full transition-all duration-1000"
+                style={{ width: `${Math.min(progressPercent, 100)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* About Draw */}
+          {draw.description && (
+            <div className="bg-white dark:bg-[#0F1626] p-6 rounded-3xl border border-slate-200/80 dark:border-white/[0.08] shadow-xs space-y-2">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                Contest Overview
+              </h3>
+              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-normal whitespace-pre-line">
+                {draw.description}
+              </p>
+            </div>
+          )}
+
+          {/* Prizes Catalog */}
+          {products.length > 0 && (
+            <div className="bg-white dark:bg-[#0F1626] p-6 sm:p-8 rounded-3xl border border-slate-200/80 dark:border-white/[0.08] shadow-xs space-y-5">
               <div className="flex items-center gap-2">
-                 <Clock size={18} className="text-purple-600 dark:text-purple-400" />
-                 <p className="text-sm font-bold text-gray-900 dark:text-white leading-tight">
-                    {formatDate(draw.endTime)}
-                 </p>
+                <Crown size={20} className="text-amber-500" />
+                <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                  Prizes To Be Won
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {products.map((product) => (
+                  <div
+                    key={product.id}
+                    className="flex items-center gap-4 p-3.5 rounded-2xl bg-slate-50 dark:bg-[#121B2E] border border-slate-200/80 dark:border-white/[0.06]"
+                  >
+                    <div className="w-16 h-16 rounded-xl bg-white dark:bg-slate-900 overflow-hidden shrink-0 border border-slate-200 dark:border-white/5 flex items-center justify-center">
+                      {product.image ? (
+                        <img
+                          src={getImageUrl(product.image)}
+                          alt={product.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Trophy size={24} className="text-slate-400" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                        {product.name}
+                      </p>
+                      <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                        Quantity: {product.quantity}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Ticket Progress */}
-          <div className="mb-10 bg-gray-50 dark:bg-[#0B0E14] p-5 rounded-2xl border border-gray-100 dark:border-white/5">
-             <div className="flex justify-between items-center mb-3">
-                <div className="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
-                   <Users size={16} className="text-gray-400" />
-                   <span>{soldCount} <span className="text-gray-400 font-normal">tickets sold</span></span>
-                </div>
-                <span className="text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30 px-2 py-1 rounded">
-                   {leftCount} left
-                </span>
-             </div>
-             <div className="h-4 w-full bg-gray-200 dark:bg-white/5 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-purple-600 to-pink-600 transition-all duration-1000 relative"
-                  style={{ width: `${progressPercent}%` }}
-                >
-                   <div className="absolute inset-0 bg-white/20 animate-[shimmer_2s_infinite]" />
-                </div>
-             </div>
-          </div>
-
-          {/* Products List */}
-          {products.length > 0 && (
-            <div className="mb-8">
-                <h3 className="text-lg font-bold mb-5 flex items-center gap-2">
-                   <Crown size={20} className="text-yellow-500 fill-yellow-500" /> 
-                   Win These Prizes
-                </h3>
-                <div className="space-y-4">
-                  {products.map((product) => (
-                      <div key={product.id} className="flex gap-4 bg-gray-50 dark:bg-[#0B0E14] p-4 rounded-2xl border border-gray-100 dark:border-white/5 items-center">
-                          <div className="w-20 h-20 bg-white dark:bg-gray-800 rounded-xl overflow-hidden flex-shrink-0 border border-gray-200 dark:border-white/5">
-                            {product.image ? (
-                                <img src={getImageUrl(product.image)} className="w-full h-full object-cover" alt={product.name} />
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center text-3xl">🎁</div>
-                            )}
-                          </div>
-                          <div>
-                            <p className="font-bold text-gray-900 dark:text-white text-lg leading-tight mb-1">{product.name}</p>
-                            <p className="text-xs text-gray-500 font-medium bg-gray-200 dark:bg-white/10 px-2 py-0.5 rounded w-fit">
-                               Quantity: {product.quantity}
-                            </p>
-                          </div>
-                      </div>
-                  ))}
-                </div>
+          {/* Rules and Fair Play */}
+          {draw.rules && (
+            <div className="bg-white dark:bg-[#0F1626] p-6 sm:p-8 rounded-3xl border border-slate-200/80 dark:border-white/[0.08] shadow-xs space-y-3">
+              <div className="flex items-center gap-2 text-slate-900 dark:text-white">
+                <Info size={18} className="text-primary" />
+                <h3 className="text-base font-bold">Contest Rules & Terms</h3>
+              </div>
+              <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed whitespace-pre-line">
+                {draw.rules}
+              </div>
             </div>
           )}
+        </div>
 
-          {/* Rules Accordion Style */}
-          {draw.rules && (
-             <div className="border-t border-gray-100 dark:border-white/5 pt-6 mt-6">
-                <h3 className="font-bold mb-3 flex items-center gap-2 text-gray-900 dark:text-white">
-                   <Info size={18} className="text-gray-400" /> Rules
-                </h3>
-                <div className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed whitespace-pre-line">
-                  {draw.rules}
-                </div>
-             </div>
-          )}
+        {/* Right Column (4 cols): Sticky Desktop Checkout Card & Fair Play Guarantee */}
+        <div className="lg:col-span-4 space-y-6">
+          <div className="sticky top-24 bg-white dark:bg-[#0F1626] p-6 sm:p-8 rounded-3xl border border-slate-200/80 dark:border-white/[0.08] shadow-md space-y-5">
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                Ticket Price
+              </p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-slate-900 dark:text-white">
+                  {formatCurrency(draw.entryFee)}
+                </span>
+                <span className="text-xs text-slate-400 font-medium">/ 1 ticket</span>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 dark:border-white/5 space-y-3">
+              <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                <span>Draw Closes</span>
+                <span className="font-semibold text-slate-900 dark:text-white">
+                  {formatDate(draw.endTime)}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                <span>Remaining Tickets</span>
+                <span className="font-semibold text-slate-900 dark:text-white">
+                  {leftCount}
+                </span>
+              </div>
+            </div>
+
+            {/* Action Button */}
+            {draw.userStatus?.hasJoined ? (
+              <button
+                onClick={() => router.push('/user/tickets')}
+                className="w-full py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+              >
+                <CheckCircle size={18} />
+                <span>View My Ticket</span>
+              </button>
+            ) : draw.userStatus?.pendingPayment ? (
+              <button
+                disabled
+                className="w-full py-3.5 px-6 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold text-sm flex items-center justify-center gap-2 cursor-not-allowed"
+              >
+                <Clock size={18} />
+                <span>Approval Pending</span>
+              </button>
+            ) : isLive && leftCount > 0 ? (
+              <button
+                onClick={() => router.push(`/user/draws/${id}/buy`)}
+                className="w-full py-3.5 px-6 rounded-2xl bg-primary hover:bg-primary/95 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-primary/25 active:scale-95 transition-all"
+              >
+                <Ticket size={18} />
+                <span>Book Tickets Now</span>
+              </button>
+            ) : (
+              <button
+                disabled
+                className="w-full py-3.5 px-6 rounded-2xl bg-slate-100 dark:bg-white/10 text-slate-400 font-bold text-sm cursor-not-allowed"
+              >
+                {isLive ? 'Sold Out' : 'Contest Ended'}
+              </button>
+            )}
+
+            {/* Fair Play Box */}
+            <div className="pt-4 border-t border-slate-100 dark:border-white/5 space-y-2 text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
+                <ShieldCheck size={16} className="text-emerald-500" />
+                <span>Cryptographically Fair Draw</span>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                Winners are shuffled and picked using an immutable CSPRNG Fisher-Yates algorithm. No admin tampering is possible.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Sticky Bottom Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-[#0B0E14]/90 backdrop-blur-lg border-t border-gray-200 dark:border-white/10 p-4 z-50 transition-colors duration-300">
-         <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
-            <div className="hidden sm:block">
-               <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Total Payable</p>
-               <p className="text-2xl font-black text-gray-900 dark:text-white">{formatCurrency(draw.entryFee)}</p>
-            </div>
+      {/* Mobile Sticky Bottom CTA Bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#090D16]/95 backdrop-blur-2xl border-t border-slate-200/80 dark:border-white/[0.08] p-4 pb-safe shadow-lg">
+        <div className="flex items-center justify-between gap-4 max-w-lg mx-auto">
+          <div>
+            <p className="text-[10px] text-slate-400 font-bold uppercase">Price</p>
+            <p className="text-lg font-black text-slate-900 dark:text-white">
+              {formatCurrency(draw.entryFee)}
+            </p>
+          </div>
 
-            {/* Dynamic Button Logic */}
+          <div className="flex-1 max-w-[220px]">
             {draw.userStatus?.hasJoined ? (
-               <button 
-                 onClick={() => router.push('/user/tickets')}
-                 className="w-full sm:w-auto flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 px-8 rounded-full flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
-               >
-                 <CheckCircle size={20} /> View Ticket
-               </button>
+              <button
+                onClick={() => router.push('/user/tickets')}
+                className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+              >
+                <CheckCircle size={16} />
+                <span>View Ticket</span>
+              </button>
             ) : draw.userStatus?.pendingPayment ? (
-                <button 
-                  disabled
-                  className="w-full sm:w-auto flex-1 bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 border border-yellow-500/20 font-bold py-3.5 px-8 rounded-full flex items-center justify-center gap-2 cursor-not-allowed"
-                >
-                  <Clock size={20} /> Approval Pending
-                </button>
+              <button
+                disabled
+                className="w-full py-3 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold text-xs flex items-center justify-center gap-1.5 cursor-not-allowed"
+              >
+                <Clock size={16} />
+                <span>Pending</span>
+              </button>
             ) : isLive && leftCount > 0 ? (
-               <button 
-                 onClick={() => router.push(`/user/draws/${id}/buy`)}
-                 className="w-full sm:w-auto flex-1 bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-200 font-bold py-3.5 px-8 rounded-full flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all"
-               >
-                 <Ticket size={20} /> Join Now <span className="sm:hidden">• {formatCurrency(draw.entryFee)}</span>
-               </button>
+              <button
+                onClick={() => router.push(`/user/draws/${id}/buy`)}
+                className="w-full py-3 rounded-xl bg-primary text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-primary/25 active:scale-95 transition-all"
+              >
+                <Ticket size={16} />
+                <span>Join Now</span>
+              </button>
             ) : (
-               <button disabled className="w-full sm:w-auto flex-1 bg-gray-100 dark:bg-white/10 text-gray-400 font-bold py-3.5 px-8 rounded-full cursor-not-allowed">
-                 {isLive ? 'Sold Out' : 'Draw Closed'}
-               </button>
+              <button
+                disabled
+                className="w-full py-3 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-400 font-bold text-xs cursor-not-allowed"
+              >
+                Closed
+              </button>
             )}
-         </div>
+          </div>
+        </div>
       </div>
     </div>
   );

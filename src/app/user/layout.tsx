@@ -9,18 +9,16 @@ export default function UserLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#0B0E14] transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50/60 dark:bg-[#090D16] transition-colors duration-300 flex flex-col">
       <Header />
-      <BottomNav />
-      <main className="relative w-full">
-        <div className="max-w-7xl mx-auto">
       
-          <div className="p-4 sm:p-6 lg:p-8 pt-6 pb-32 md:pb-12 md:pl-24 animate-in fade-in slide-in-from-bottom-2 duration-500">
-            {children}
-          </div>
+      <main className="flex-1 w-full relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-28 md:pb-16 animate-in fade-in duration-300">
+          {children}
         </div>
       </main>
-      
+
+      <BottomNav />
     </div>
   );
 }

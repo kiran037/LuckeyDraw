@@ -1,6 +1,14 @@
-export default function GlassCard({ children, className = "" }: { children: React.ReactNode, className?: string }) {
+export default function GlassCard({
+  children,
+  className = '',
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <div className={`bg-white/70 dark:bg-[#151925]/70 backdrop-blur-2xl border border-white/20 dark:border-white/5 shadow-xl rounded-3xl p-6 sm:p-8 ${className}`}>
+    <div
+      className={`bg-white dark:bg-[#0F1626] border border-slate-200/80 dark:border-white/[0.08] shadow-xl shadow-slate-200/50 dark:shadow-none rounded-3xl p-6 sm:p-8 transition-all ${className}`}
+    >
       {children}
     </div>
   );

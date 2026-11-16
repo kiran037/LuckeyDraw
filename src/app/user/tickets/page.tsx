@@ -1,15 +1,16 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import {
   Ticket as TicketIcon, Calendar, ChevronLeft, Search,
-  Trophy, ArrowRight, Loader2, RefreshCw
+  Trophy, ArrowRight, Loader2, RefreshCw, Copy, Check,
+  Sparkles, CheckCircle2, AlertCircle
 } from 'lucide-react';
 
-// --- Types ---
 interface Ticket {
   id: string;
   ticketCode: string;
@@ -27,17 +28,17 @@ interface Ticket {
   } | null;
 }
 
-type FilterType = 'ALL' | 'WINNER' | 'ACTIVE';
+type FilterType = 'ALL' | 'ACTIVE' | 'WINNER';
 
 export default function TicketsPage() {
   const router = useRouter();
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [filteredTickets, setFilteredTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterType>('ALL');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const loadTickets = useCallback(async () => {
     setLoading(true);
@@ -53,7 +54,7 @@ export default function TicketsPage() {
         setTickets(validTickets);
       }
     } catch {
-       router.push('/signin');
+      router.push('/signin');
     } finally {
       setLoading(false);
     }
@@ -63,47 +64,61 @@ export default function TicketsPage() {
     loadTickets();
   }, [loadTickets]);
 
-  useEffect(() => {
-    if (!Array.isArray(tickets)) return;
+  const copyTicketCode = (code: string, id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(code);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const filteredTickets = useMemo(() => {
+    if (!Array.isArray(tickets)) return [];
 
     let result = [...tickets];
 
     if (filter === 'WINNER') result = result.filter(t => t.isWinner);
     if (filter === 'ACTIVE') result = result.filter(t => t.status === 'ACTIVE');
 
-    if (search) {
-      const q = search.toLowerCase();
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
       result = result.filter(t =>
         t.ticketCode.toLowerCase().includes(q) ||
         t.draw.title.toLowerCase().includes(q)
       );
     }
 
-    setFilteredTickets(result);
-  }, [search, filter, tickets]);
+    return result;
+  }, [tickets, filter, search]);
 
-  // --- Loading State ---
+  const stats = useMemo(() => {
+    const total = tickets.length;
+    const winners = tickets.filter(t => t.isWinner).length;
+    const active = tickets.filter(t => t.status === 'ACTIVE').length;
+    return { total, winners, active };
+  }, [tickets]);
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0B0E14] flex flex-col items-center justify-center space-y-3">
-        <Loader2 className="w-8 h-8 text-purple-600 dark:text-purple-400 animate-spin" />
-        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Loading tickets...</p>
+      <div className="flex flex-col items-center justify-center py-24 space-y-4">
+        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+        </div>
+        <p className="text-sm font-semibold text-slate-400">Loading your ticket vault...</p>
       </div>
     );
   }
 
-  // --- Error State ---
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0B0E14] flex flex-col items-center justify-center p-4 text-center">
-        <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-2xl flex items-center justify-center mb-4">
-          <TicketIcon className="w-7 h-7 text-red-500" />
+      <div className="max-w-md mx-auto py-16 text-center">
+        <div className="w-14 h-14 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <AlertCircle className="w-7 h-7 text-rose-500" />
         </div>
-        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Oops! Something went wrong</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-xs">{error}</p>
+        <h3 className="text-lg font-bold text-white mb-2">Failed to Load Tickets</h3>
+        <p className="text-sm text-slate-400 mb-6">{error}</p>
         <button
           onClick={loadTickets}
-          className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-bold rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-transform"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30 transition-all active:scale-95"
         >
           <RefreshCw size={16} /> Try Again
         </button>
@@ -112,169 +127,229 @@ export default function TicketsPage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-gray-50 dark:bg-[#0B0E14] text-gray-900 dark:text-white pb-24 sm:pb-32">
-
-      {/* Background Glow (Dark Mode Only) */}
-      <div className="fixed inset-0 z-0 pointer-events-none select-none hidden dark:block overflow-hidden">
-        <div className="absolute top-[10%] left-[-15%] w-[400px] h-[400px] bg-purple-500/8 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[20%] right-[-10%] w-[350px] h-[350px] bg-indigo-500/8 rounded-full blur-[100px]" />
-      </div>
-
-      <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
-
-        {/* === HEADER === */}
-        <div className="mb-6 sm:mb-8">
-          {/* Top Bar */}
-          <div className="flex items-center gap-3 mb-6">
-            <button
-              onClick={() => router.back()}
-              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white dark:bg-[#151925] hover:bg-gray-100 dark:hover:bg-[#1a1f2e] border border-gray-200 dark:border-white/10 transition-all active:scale-95"
-            >
-              <ChevronLeft size={20} className="text-gray-600 dark:text-gray-300" />
-            </button>
-            <div className="flex-1">
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-gray-900 dark:text-white">My Tickets</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold mt-0.5">
-                Total: <span className="text-purple-600 dark:text-purple-400">{Array.isArray(tickets) ? tickets.length : 0}</span> {tickets.length === 1 ? 'ticket' : 'tickets'}
-              </p>
-            </div>
-          </div>
-
-          {/* Controls */}
-          <div className="space-y-3">
-            {/* Search */}
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Search size={18} className="text-gray-400 dark:text-gray-500" />
-              </div>
-              <input
-                type="text"
-                placeholder="Search by ticket code or draw name..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-white dark:bg-[#151925] border border-gray-200 dark:border-white/10 rounded-xl py-3 pl-11 pr-4 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500/50 transition-all"
-              />
-            </div>
-
-            {/* Filter Buttons */}
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-              {(['ALL', 'ACTIVE', 'WINNER'] as FilterType[]).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${filter === f
-                      ? 'bg-gray-900 dark:bg-white text-white dark:text-black shadow-lg scale-105'
-                      : 'bg-white dark:bg-[#151925] text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-[#1a1f2e] active:scale-95'
-                    }`}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
+    <div className="space-y-6">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.back()}
+            className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-900/60 dark:bg-slate-900/80 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white transition-all active:scale-95"
+            aria-label="Go back"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+              My Ticket Vault
+              {stats.winners > 0 && (
+                <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                  <Trophy size={12} /> {stats.winners} Won
+                </span>
+              )}
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+              Verified cryptographic entries in all official lucky draws
+            </p>
           </div>
         </div>
 
-        {/* === CONTENT === */}
-        {!Array.isArray(filteredTickets) || filteredTickets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 sm:py-24 bg-white/60 dark:bg-[#151925]/40 rounded-2xl border-2 border-dashed border-gray-300 dark:border-white/10">
-            <div className="w-14 h-14 bg-gray-100 dark:bg-white/5 rounded-2xl flex items-center justify-center text-gray-400 dark:text-gray-500 mb-4">
-              {search ? <Search size={24} /> : <TicketIcon size={24} />}
-            </div>
-            <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white mb-2">
-              {search ? "No matches found" : "No Tickets Yet"}
-            </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-[280px] px-4">
-              {search ? "Try searching with a different keyword." : "Purchase tickets to participate in draws and win amazing prizes!"}
-            </p>
-            {!search && (
-              <button
-                onClick={() => router.push('/user/draws')}
-                className="mt-6 px-6 py-2.5 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white text-sm font-bold rounded-xl transition-all shadow-lg hover:shadow-xl active:scale-95"
-              >
-                Browse Draws
-              </button>
-            )}
+        {/* Quick Summary Pill */}
+        <div className="flex items-center gap-2 bg-slate-900/60 dark:bg-slate-900/80 border border-white/10 px-4 py-2 rounded-2xl w-fit">
+          <div className="text-center px-2">
+            <div className="text-[10px] uppercase font-bold text-slate-400">Total</div>
+            <div className="text-sm font-black text-white">{stats.total}</div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            {filteredTickets.map((ticket) => (
-              <div
-                key={ticket.id}
-                onClick={() => router.push(`/user/tickets/${ticket.id}`)}
-                className={`group relative rounded-2xl p-5 flex flex-col justify-between cursor-pointer transition-all duration-300 hover:-translate-y-1 border ${ticket.isWinner
-                    ? 'bg-gradient-to-br from-yellow-50 via-orange-50 to-yellow-50 dark:from-yellow-900/10 dark:via-orange-900/10 dark:to-yellow-900/10 border-yellow-300 dark:border-yellow-500/30 shadow-lg hover:shadow-xl'
-                    : 'bg-white dark:bg-[#151925] border-gray-200 dark:border-white/10 hover:border-purple-300 dark:hover:border-purple-500/30 hover:shadow-xl'
-                  }`}
+          <div className="h-6 w-px bg-white/10" />
+          <div className="text-center px-2">
+            <div className="text-[10px] uppercase font-bold text-emerald-400">Active</div>
+            <div className="text-sm font-black text-emerald-400">{stats.active}</div>
+          </div>
+          <div className="h-6 w-px bg-white/10" />
+          <div className="text-center px-2">
+            <div className="text-[10px] uppercase font-bold text-amber-400">Wins</div>
+            <div className="text-sm font-black text-amber-400">{stats.winners}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Search & Filter Toolbar */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search by ticket code or draw title..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 rounded-2xl py-2.5 pl-10 pr-4 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+          />
+        </div>
+
+        {/* Filter Tabs */}
+        <div className="flex p-1 bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 rounded-2xl shrink-0">
+          {(
+            [
+              { key: 'ALL', label: `All (${stats.total})` },
+              { key: 'ACTIVE', label: `Active (${stats.active})` },
+              { key: 'WINNER', label: `Wins (${stats.winners})` },
+            ] as const
+          ).map((tab) => {
+            const isActive = filter === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setFilter(tab.key)}
+                className={`relative px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  isActive
+                    ? 'text-white'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
               >
-                {/* Decorative Circles */}
-                <div className="absolute top-1/2 -left-3 w-6 h-6 bg-gray-50 dark:bg-[#0B0E14] rounded-full -translate-y-1/2 border-r border-gray-200 dark:border-white/10" />
-                <div className="absolute top-1/2 -right-3 w-6 h-6 bg-gray-50 dark:bg-[#0B0E14] rounded-full -translate-y-1/2 border-l border-gray-200 dark:border-white/10" />
-
-                {/* Winner Trophy */}
-                {ticket.isWinner && (
-                  <div className="absolute top-3 right-3">
-                    <Trophy size={18} className="text-yellow-500 dark:text-yellow-400 animate-pulse" />
-                  </div>
+                {isActive && (
+                  <motion.div
+                    layoutId="ticketFilterTab"
+                    className="absolute inset-0 bg-indigo-600 rounded-xl shadow-md"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  />
                 )}
+                <span className="relative z-10">{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-                {/* Ticket Code Section */}
-                <div className="mb-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Ticket</span>
-                    {!ticket.isWinner && <TicketIcon size={14} className="text-gray-300 dark:text-gray-600 group-hover:text-purple-500 dark:group-hover:text-purple-400 transition-colors" />}
-                  </div>
-                  <div className="font-mono text-lg sm:text-xl font-black text-gray-900 dark:text-white tracking-tight">
-                    {ticket.ticketCode}
-                  </div>
-                </div>
+      {/* Ticket Grid */}
+      {filteredTickets.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 bg-white/40 dark:bg-slate-900/40 rounded-3xl border-2 border-dashed border-slate-200 dark:border-white/10 text-center px-4">
+          <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4">
+            {search ? <Search size={28} /> : <TicketIcon size={28} />}
+          </div>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">
+            {search ? 'No tickets found matching your search' : 'No Tickets in this Category'}
+          </h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm mb-6">
+            {search
+              ? 'Try searching with another keyword or clear your filter.'
+              : 'Join active lucky draws today and stand a chance to win luxury rewards!'}
+          </p>
+          {!search && (
+            <button
+              onClick={() => router.push('/user/draws')}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-sm font-bold rounded-2xl shadow-xl shadow-indigo-600/30 transition-all active:scale-95"
+            >
+              <Sparkles size={16} /> Explore Active Draws
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <AnimatePresence mode="popLayout">
+            {filteredTickets.map((ticket) => {
+              const isWinner = ticket.isWinner;
+              const isCopied = copiedId === ticket.id;
 
-                {/* Divider */}
-                <div className="w-full border-t border-dashed border-gray-300 dark:border-white/10 my-3" />
+              return (
+                <motion.div
+                  key={ticket.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  onClick={() => router.push(`/user/tickets/${ticket.id}`)}
+                  className={`group relative rounded-3xl p-5 cursor-pointer transition-all duration-300 hover:-translate-y-1 overflow-hidden border ${
+                    isWinner
+                      ? 'bg-gradient-to-br from-amber-500/10 via-slate-900 to-amber-950/20 border-amber-500/40 shadow-xl shadow-amber-500/10'
+                      : 'bg-white dark:bg-slate-900/80 border-slate-200 dark:border-white/10 hover:border-indigo-500/40 hover:shadow-xl hover:shadow-indigo-500/5'
+                  }`}
+                >
+                  {/* Perforation Left/Right Cutouts */}
+                  <div className="absolute top-1/2 -left-3 w-6 h-6 rounded-full bg-[#090D16] border border-white/10 -translate-y-1/2" />
+                  <div className="absolute top-1/2 -right-3 w-6 h-6 rounded-full bg-[#090D16] border border-white/10 -translate-y-1/2" />
 
-                {/* Draw Info */}
-                <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white text-sm mb-3 line-clamp-2 leading-snug pr-6">
-                    {ticket.draw.title}
-                  </h3>
+                  {/* Top Header: Monospace Ticket Code & Copy Button */}
+                  <div className="flex items-center justify-between gap-3 mb-3 pl-3 pr-3">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                        isWinner ? 'bg-amber-500/20 text-amber-400' : 'bg-indigo-500/10 text-indigo-400'
+                      }`}>
+                        {isWinner ? <Trophy size={16} /> : <TicketIcon size={16} />}
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                          Official Ticket Code
+                        </div>
+                        <div className="font-mono text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-wider flex items-center gap-2">
+                          {ticket.ticketCode}
+                          <button
+                            onClick={(e) => copyTicketCode(ticket.ticketCode, ticket.id, e)}
+                            className="text-slate-400 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10"
+                            title="Copy Code"
+                          >
+                            {isCopied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="flex gap-2">
-                      <span className={`inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase ${ticket.draw.status === 'LIVE'
-                          ? 'bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400'
-                          : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400'
+                    {/* Status Pill */}
+                    <div>
+                      {isWinner ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                          <Trophy size={12} /> Winner
+                        </span>
+                      ) : (
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                          ticket.draw.status === 'LIVE'
+                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
                         }`}>
-                        {ticket.draw.status}
-                      </span>
-
-                      {ticket.isWinner && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400">
-                          Winner
+                          {ticket.draw.status}
                         </span>
                       )}
                     </div>
+                  </div>
 
-                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  {/* Perforation Line */}
+                  <div className="relative my-4">
+                    <div className="border-t border-dashed border-slate-300 dark:border-white/10" />
+                  </div>
+
+                  {/* Draw Title & Footer Details */}
+                  <div className="pl-3 pr-3 space-y-3">
+                    <h3 className="font-bold text-slate-900 dark:text-white text-base line-clamp-1 group-hover:text-indigo-400 transition-colors">
+                      {ticket.draw.title}
+                    </h3>
+
+                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar size={13} className="text-slate-400" />
+                        <span>Booked on {formatDate(ticket.createdAt)}</span>
+                      </div>
+
                       {ticket.payment && (
-                        <>
-                          <span className="font-semibold text-gray-700 dark:text-gray-300">{formatCurrency(ticket.payment.amount)}</span>
-                          <div className="w-1 h-1 bg-gray-300 dark:bg-gray-600 rounded-full" />
-                        </>
+                        <div className="font-bold text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded-md">
+                          {formatCurrency(ticket.payment.amount)}
+                        </div>
                       )}
-                      <Calendar size={12} />
-                      <span>{formatDate(ticket.createdAt)}</span>
+                    </div>
+
+                    {/* Bottom Action Hint */}
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[11px] font-semibold text-slate-400 group-hover:text-slate-300 transition-colors flex items-center gap-1">
+                        <CheckCircle2 size={13} className="text-emerald-500" /> Cryptographically Verified
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-400 group-hover:translate-x-0.5 transition-transform">
+                        Details <ArrowRight size={14} />
+                      </span>
                     </div>
                   </div>
-                </div>
-
-                {/* Hover Arrow */}
-                <div className="absolute bottom-4 right-4 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
-                  <ArrowRight size={18} className="text-purple-600 dark:text-purple-400" />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      )}
     </div>
   );
 }

@@ -10,22 +10,26 @@ import {
   AlertCircle,
   Loader2,
   CreditCard,
+  Wallet,
+  Copy,
+  Check,
+  ShieldCheck,
+  QrCode,
+  Lock,
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 
-/* ---------------- CONFIG ---------------- */
-
+const ADMIN_UPI_ID = 'sawariya@upi';
 const ADMIN_QR_CODE =
-  'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=upi://pay?pa=admin@upi&pn=SawariyaApp';
-
-const PROCESSING_FEE = 5; // ₹5 processing fee
-
-/* ---------------- TYPES ---------------- */
+  `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=upi://pay?pa=${ADMIN_UPI_ID}&pn=SawariyaLuckyDraw`;
+const PROCESSING_FEE = 5;
 
 interface Draw {
   id: string;
   title: string;
   entryFee: number;
+  bannerImage: string | null;
   status: string;
 }
 
@@ -33,9 +37,8 @@ interface ApiResponse {
   success: boolean;
   message?: string;
   error?: string;
+  paymentId?: string;
 }
-
-/* ================= PAGE ================= */
 
 export default function BuyTicketPage() {
   const params = useParams();
@@ -50,11 +53,10 @@ export default function BuyTicketPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [copiedUpi, setCopiedUpi] = useState(false);
 
   const [transactionId, setTransactionId] = useState('');
   const [screenshot, setScreenshot] = useState('');
-
-  /* ---------------- LOAD DRAW + WALLET ---------------- */
 
   useEffect(() => {
     async function load() {
@@ -71,7 +73,7 @@ export default function BuyTicketPage() {
         ) {
           setDraw(drawRes.data as Draw);
         } else {
-          setError('This draw is unavailable or has ended.');
+          setError('This contest is unavailable or has ended.');
         }
 
         if (meRes.success && meRes.data?.wallet !== undefined) {
@@ -88,14 +90,16 @@ export default function BuyTicketPage() {
     if (id) load();
   }, [id]);
 
-  /* ---------------- CALCULATIONS ---------------- */
-
   const entryFee = draw?.entryFee || 0;
   const walletUsed = useWallet ? Math.min(wallet, entryFee) : 0;
   const remainingAmount = entryFee - walletUsed;
-  const finalPayable = remainingAmount + PROCESSING_FEE;
+  const finalPayable = remainingAmount > 0 ? remainingAmount + PROCESSING_FEE : 0;
 
-  /* ---------------- SUBMIT ---------------- */
+  const copyUpiId = async () => {
+    await navigator.clipboard.writeText(ADMIN_UPI_ID);
+    setCopiedUpi(true);
+    setTimeout(() => setCopiedUpi(false), 2000);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,11 +107,11 @@ export default function BuyTicketPage() {
 
     if (finalPayable > 0) {
       if (!transactionId.trim()) {
-        setError('Please enter Transaction ID (UTR).');
+        setError('Please enter the 12-digit UPI Transaction ID / UTR.');
         return;
       }
       if (!screenshot) {
-        setError('Please upload payment screenshot.');
+        setError('Please upload your payment confirmation screenshot.');
         return;
       }
     }
@@ -115,162 +119,340 @@ export default function BuyTicketPage() {
     setSubmitting(true);
 
     try {
-      const res = await api.post('/user/payments/manual', {
+      const res = (await api.post('/user/payments/manual', {
         drawId: id,
         transactionId: transactionId.trim() || null,
         screenshot: screenshot || null,
         walletUsed,
-        processingFee: PROCESSING_FEE,
-      }) as ApiResponse;
+        processingFee: finalPayable > 0 ? PROCESSING_FEE : 0,
+      })) as ApiResponse;
 
       if (res.success) {
         setSuccess(true);
-        setTimeout(() => router.push('/user/tickets'), 3000);
+        setTimeout(() => router.push('/user/tickets'), 2500);
       } else {
         setError(res.message || res.error || 'Payment failed.');
       }
     } catch {
-      setError('Unexpected error occurred.');
+      setError('An unexpected error occurred. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  /* ---------------- STATES ---------------- */
-
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-10 h-10 animate-spin text-purple-600" />
+      <div className="min-h-[50vh] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
+          Preparing Checkout Terminal...
+        </p>
       </div>
     );
   }
 
-  if (!draw) {
+  if (error && !draw) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center text-center p-6">
-        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-        <p>{error}</p>
-        <button onClick={() => router.back()} className="mt-6 px-6 py-2 bg-black text-white rounded-xl">
-          Go Back
+      <div className="min-h-[50vh] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 bg-red-50 dark:bg-red-500/10 rounded-2xl flex items-center justify-center mb-4 text-red-500 border border-red-200 dark:border-red-500/20">
+          <AlertCircle size={32} />
+        </div>
+        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">
+          Checkout Unavailable
+        </h3>
+        <p className="text-sm text-slate-500 mb-6">{error}</p>
+        <button
+          onClick={() => router.push('/user/draws')}
+          className="px-6 py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl text-sm"
+        >
+          Return to Draws
         </button>
       </div>
     );
   }
 
-  if (success) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="bg-white rounded-3xl p-8 text-center shadow-xl">
-          <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-          <h2 className="text-xl font-bold mb-2">Payment Submitted</h2>
-          <p className="text-gray-500">
-            Your ticket will be issued after admin approval.
+  return (
+    <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in duration-300">
+      {/* Top Header */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => router.back()}
+          className="w-10 h-10 rounded-xl bg-white dark:bg-[#0F1626] border border-slate-200/80 dark:border-white/[0.08] flex items-center justify-center text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 active:scale-95 transition-all shadow-xs"
+        >
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+            Confirm & Secure Ticket
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Contest: {draw?.title}
           </p>
         </div>
       </div>
-    );
-  }
 
-  /* ================= UI ================= */
-
-  return (
-    <div className="min-h-screen bg-gray-50 p-4 pb-24">
-      <div className="max-w-lg mx-auto">
-
-        {/* HEADER */}
-        <div className="flex items-center gap-4 mb-6">
-          <button onClick={() => router.back()} className="p-2 bg-white rounded-xl">
-            <ArrowLeft />
-          </button>
-          <h1 className="text-xl font-bold">Checkout</h1>
-        </div>
-
-        {/* AMOUNT */}
-        <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-3xl p-6 text-white mb-6">
-          <p className="text-sm opacity-80">Entry Fee</p>
-          <h2 className="text-4xl font-black">
-            {formatCurrency(entryFee)}
-          </h2>
-          <p className="text-xs opacity-70 mt-2">{draw.title}</p>
-        </div>
-
-        {/* WALLET */}
-        <div className="bg-white rounded-3xl p-5 mb-6 shadow-sm">
-          <div className="flex justify-between items-center mb-3">
+      {/* Success Modal / State */}
+      <AnimatePresence>
+        {success && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="p-8 rounded-3xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-4 shadow-xl"
+          >
+            <div className="w-16 h-16 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/30">
+              <CheckCircle size={36} />
+            </div>
             <div>
-              <p className="font-bold">Use Wallet</p>
-              <p className="text-xs text-gray-500">Available ₹{wallet}</p>
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+                {finalPayable === 0 ? 'Ticket Booked Instantly!' : 'Payment Submitted!'}
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1 max-w-sm mx-auto">
+                {finalPayable === 0
+                  ? 'Your ticket has been generated from your wallet balance.'
+                  : 'Your payment proof has been submitted for admin verification.'}
+              </p>
             </div>
-            <input
-              type="checkbox"
-              checked={useWallet}
-              onChange={() => setUseWallet(!useWallet)}
-              className="w-5 h-5 accent-purple-600"
-            />
-          </div>
-
-          <div className="text-sm space-y-1">
-            <div className="flex justify-between">
-              <span>Entry Fee</span>
-              <span>₹{entryFee}</span>
+            <div className="inline-flex items-center gap-2 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+              <Loader2 size={14} className="animate-spin" />
+              <span>Redirecting to your Ticket Locker...</span>
             </div>
-            {walletUsed > 0 && (
-              <div className="flex justify-between text-green-600">
-                <span>Wallet Used</span>
-                <span>- ₹{walletUsed}</span>
-              </div>
-            )}
-            <div className="flex justify-between">
-              <span>Processing Fee</span>
-              <span>₹{PROCESSING_FEE}</span>
-            </div>
-            <div className="border-t pt-2 mt-2 flex justify-between font-bold">
-              <span>Payable</span>
-              <span>₹{finalPayable}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* QR */}
-        {finalPayable > 0 && (
-          <div className="bg-white rounded-3xl p-6 text-center mb-6">
-            <CreditCard className="mx-auto mb-3 text-purple-600" />
-            <img src={ADMIN_QR_CODE} alt="Payment UPI QR Code" className="w-40 h-40 mx-auto mb-3" />
-            <p className="text-xs text-gray-500">Scan & Pay</p>
-          </div>
+          </motion.div>
         )}
+      </AnimatePresence>
 
-        {/* FORM */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {finalPayable > 0 && (
-            <>
-              <input
-                type="text"
-                placeholder="Transaction ID / UTR"
-                value={transactionId}
-                onChange={(e) => setTransactionId(e.target.value)}
-                className="w-full p-4 rounded-2xl border"
-              />
-
-              <ImageUploader
-                value={screenshot}
-                onChange={setScreenshot}
-                folder="payments"
-                label="Upload Screenshot"
-              />
-            </>
+      {!success && (
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {error && (
+            <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 text-xs sm:text-sm font-semibold flex items-center gap-2">
+              <AlertCircle size={18} className="shrink-0" />
+              <span>{error}</span>
+            </div>
           )}
 
+          {/* 1. Summary & Wallet Calculation Card */}
+          <div className="bg-white dark:bg-[#0F1626] rounded-3xl p-6 sm:p-7 border border-slate-200/80 dark:border-white/[0.08] shadow-xs space-y-5">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-white/5">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Ticket Summary
+              </span>
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-primary/10 text-primary">
+                1 Entry Ticket
+              </span>
+            </div>
+
+            <div className="space-y-2.5 text-sm">
+              <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                <span>Contest Entry Fee</span>
+                <span className="font-bold text-slate-900 dark:text-white">
+                  {formatCurrency(entryFee)}
+                </span>
+              </div>
+
+              {/* Wallet Usage Toggle */}
+              {wallet > 0 && (
+                <div className="pt-2 pb-2 border-y border-slate-100 dark:border-white/5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                        <Wallet size={16} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900 dark:text-white">
+                          Use Wallet Balance
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          ₹{wallet.toLocaleString('en-IN')} available
+                        </p>
+                      </div>
+                    </div>
+
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useWallet}
+                        onChange={(e) => setUseWallet(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                    </label>
+                  </div>
+
+                  {useWallet && walletUsed > 0 && (
+                    <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-2 px-1">
+                      <span>Wallet Deduction</span>
+                      <span>-{formatCurrency(walletUsed)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {finalPayable > 0 && (
+                <div className="flex justify-between text-slate-500 text-xs">
+                  <span>Processing & Verification Fee</span>
+                  <span>+{formatCurrency(PROCESSING_FEE)}</span>
+                </div>
+              )}
+
+              {/* Net Payable Line */}
+              <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex justify-between items-baseline">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                    Total Payable Now
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-normal">
+                    {finalPayable === 0
+                      ? 'Fully covered by wallet'
+                      : 'Via UPI QR Code'}
+                  </p>
+                </div>
+                <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+                  {formatCurrency(finalPayable)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Dynamic Payment Mechanism */}
+          {finalPayable === 0 ? (
+            /* Wallet Covered 100% */
+            <div className="p-6 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-md shadow-emerald-500/20">
+                <Check size={24} />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                Instant Wallet Booking Available
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                Your wallet has sufficient balance. No external payment or screenshot upload required. Click confirm to issue your ticket immediately.
+              </p>
+            </div>
+          ) : (
+            /* UPI Payment Terminal */
+            <div className="bg-white dark:bg-[#0F1626] rounded-3xl p-6 sm:p-7 border border-slate-200/80 dark:border-white/[0.08] shadow-xs space-y-6">
+              <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-white/5">
+                <CreditCard size={18} className="text-primary" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Step 1: Scan & Pay ₹{finalPayable} via UPI
+                </h3>
+              </div>
+
+              {/* QR Container */}
+              <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 dark:bg-[#121B2E] p-5 rounded-2xl border border-slate-200/80 dark:border-white/5">
+                <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-sm shrink-0">
+                  <img
+                    src={ADMIN_QR_CODE}
+                    alt="Sawariya Official UPI QR Code"
+                    className="w-36 h-36 mx-auto"
+                  />
+                </div>
+
+                <div className="space-y-3 text-center sm:text-left">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      Official UPI ID
+                    </span>
+                    <div className="flex items-center justify-center sm:justify-start gap-2 mt-0.5">
+                      <code className="text-sm font-mono font-bold text-slate-900 dark:text-white">
+                        {ADMIN_UPI_ID}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={copyUpiId}
+                        className="p-1.5 rounded-lg bg-white dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 transition-colors"
+                        title="Copy UPI ID"
+                      >
+                        {copiedUpi ? (
+                          <Check size={14} className="text-emerald-500" />
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Scan with PhonePe, Google Pay, Paytm, or BHIM. Pay the exact amount{' '}
+                    <strong className="text-slate-900 dark:text-white">
+                      ₹{finalPayable}
+                    </strong>
+                    .
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 2: Verification Details Input */}
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2">
+                  <QrCode size={18} className="text-primary" />
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Step 2: Enter UTR & Upload Screenshot
+                  </h3>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider block mb-1.5">
+                    UPI Transaction ID (UTR / Reference No.) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 408271829102"
+                    value={transactionId}
+                    onChange={(e) => setTransactionId(e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-[#090D16] border border-slate-200 dark:border-white/10 text-sm font-mono font-medium text-slate-900 dark:text-white focus:outline-none focus:border-primary shadow-xs"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Found in your UPI app transaction details (12 digits).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider block mb-1.5">
+                    Payment Receipt Screenshot *
+                  </label>
+                  <div className="bg-slate-50 dark:bg-[#090D16] rounded-2xl p-4 border border-slate-200 dark:border-white/10">
+                    <ImageUploader
+                      value={screenshot}
+                      onChange={(url) => setScreenshot(url)}
+                      label="Upload UPI Payment Proof"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Submit Button */}
           <button
             type="submit"
             disabled={submitting}
-            className="w-full py-4 bg-black text-white rounded-2xl font-bold"
+            className="w-full py-4 px-6 rounded-2xl bg-primary hover:bg-primary/95 text-white font-bold text-base shadow-lg shadow-primary/25 active:scale-[0.99] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
           >
-            {submitting ? 'Processing...' : 'Confirm Payment'}
+            {submitting ? (
+              <>
+                <Loader2 size={18} className="animate-spin text-white" />
+                <span>Processing Order...</span>
+              </>
+            ) : finalPayable === 0 ? (
+              <>
+                <CheckCircle size={18} />
+                <span>Confirm & Issue Ticket Instantly</span>
+              </>
+            ) : (
+              <>
+                <Lock size={16} />
+                <span>Submit Payment & Request Ticket</span>
+              </>
+            )}
           </button>
+
+          {/* Security Disclaimer */}
+          <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
+            <ShieldCheck size={15} className="text-emerald-500" />
+            <span>256-Bit SSL Encrypted & Audited Transactions</span>
+          </div>
         </form>
-      </div>
+      )}
     </div>
   );
 }

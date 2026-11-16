@@ -4,67 +4,67 @@
 
 @layer base {
   :root {
-    /* --- LIGHT MODE (Apple-like / Clean) --- */
-    --background: 210 40% 98%; /* Soft Off-White */
-    --foreground: 222 47% 11%; /* Deep Navy Text */
+    /* --- LIGHT MODE: Pristine High-End Fintech --- */
+    --background: 215 30% 98%; /* #F8FAFC Soft Slate-White */
+    --foreground: 222 47% 11%; /* #0F172A Deep Slate Obsidian */
 
-    --card: 0 0% 100%; /* Pure White */
+    --card: 0 0% 100%; /* #FFFFFF Pure White */
     --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 262 83% 58%; /* Vibrant Purple */
-    --primary-foreground: 210 40% 98%;
+    --primary: 250 84% 54%; /* #4F46E5 Vibrant Royal Indigo */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
+    --secondary: 214 32% 91%; /* #E2E8F0 */
     --secondary-foreground: 222 47% 11%;
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215 16% 47%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222 47% 11%;
+    --accent: 250 84% 97%;
+    --accent-foreground: 250 84% 54%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
 
     --border: 214 32% 91%;
     --input: 214 32% 91%;
-    --ring: 262 83% 58%;
+    --ring: 250 84% 54%;
 
-    --radius: 1rem; /* 16px default for that "Bento" feel */
+    --radius: 1rem; /* 16px */
   }
 
   .dark {
-    /* --- DARK MODE (Deep Matte / Gaming) --- */
-    --background: 224 71% 4%;  /* #0B0E14 - Deep Blue/Black */
+    /* --- DARK MODE: Deep Obsidian & Royal Indigo --- */
+    --background: 224 45% 6%;  /* #090D16 Ultra Deep Charcoal Slate */
     --foreground: 210 40% 98%;
 
-    --card: 222 47% 11%; /* Slightly lighter than BG */
+    --card: 224 40% 10%; /* #0F1626 Elevated Surface */
     --card-foreground: 210 40% 98%;
 
-    --popover: 222 47% 11%;
+    --popover: 224 40% 10%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 263 70% 50%; /* Deep Purple */
-    --primary-foreground: 210 40% 98%;
+    --primary: 250 84% 60%; /* #6366F1 Brilliant Indigo */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217 19% 27%;
+    --secondary: 224 25% 18%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 217 19% 27%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 224 25% 15%;
+    --muted-foreground: 217 19% 65%;
 
-    --accent: 217 19% 27%;
+    --accent: 250 84% 20%;
     --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 45%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217 19% 27%;
-    --input: 217 19% 27%;
-    --ring: 263 70% 50%;
+    --border: 224 25% 18%;
+    --input: 224 25% 18%;
+    --ring: 250 84% 60%;
   }
 }
 
@@ -72,23 +72,69 @@
   * {
     @apply border-border;
   }
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    @apply bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary;
+    font-feature-settings: "rlig" 1, "calt" 1, "cv11" 1;
+    overflow-x: hidden;
   }
 }
 
-/* --- CUSTOM GLASS UTILITIES --- */
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.2);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.4);
+}
+
+/* Safe Area Inset Helpers for Mobile Native Feel */
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+}
+.pt-safe {
+  padding-top: max(env(safe-area-inset-top, 0px), 12px);
+}
+
 @layer utilities {
   .glass {
-    @apply bg-white/70 dark:bg-[#0B0E14]/70 backdrop-blur-xl border border-white/20 dark:border-white/5;
+    @apply bg-white/75 dark:bg-[#090D16]/80 backdrop-blur-xl border border-black/[0.06] dark:border-white/[0.08];
   }
-  
+
   .glass-card {
-    @apply bg-white dark:bg-[#151925] shadow-lg shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-white/5;
+    @apply bg-white dark:bg-[#0F1626] shadow-sm hover:shadow-md transition-all duration-300 border border-slate-200/80 dark:border-white/[0.08];
   }
 
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-pink-500;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500;
+  }
+
+  .text-gradient-gold {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500;
+  }
+
+  .radial-glow {
+    background: radial-gradient(circle at center, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
+  }
+}
+
+/* Respect user motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
